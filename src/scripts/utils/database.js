@@ -183,7 +183,7 @@ export const getData = async (dataObj, options = null) => {
     options && (storeOptions = options[dataStore]);
     const store = tx.objectStore(dataStore);
     storeOptions?.index && (index = store.index(storeOptions.index));
-    const stored_ata = await Promise.all([dataObj[dataStore]].flat().map(async key => {
+    const stored_at = await Promise.all([dataObj[dataStore]].flat().map(async key => {
       if (!key) {
         console.warn('[FDB] getData: key is undefined');
         return void 0;
@@ -197,7 +197,7 @@ export const getData = async (dataObj, options = null) => {
         return null;
       }
     }));
-    returnObj[dataStore] = stored_ata.map(data => typeof data === 'object' ? structuredClone(Object.assign(data, { expired: updateNeeded(data) })) : structuredClone(data));
+    returnObj[dataStore] = stored_at.map(data => typeof data === 'object' ? structuredClone(Object.assign(data, { expired: updateNeeded(data) })) : structuredClone(data));
   }));
 
   //await tx.done;
