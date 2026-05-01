@@ -1,7 +1,7 @@
 import { noact } from './utils/noact.js';
 import { postFunction } from './utils/mutation.js';
 import { getOptions } from './utils/jsTools.js';
-import { necromancePostObjects, summonLivePost } from './utils/necromancy.js';
+import { getPosts } from './utils/postDaemon.js';
 import { svgIcon } from './utils/icons.js';
 import { getProcessor } from './utils/markdown.js';
 
@@ -46,12 +46,12 @@ const setupDisplay = (postBody, actionTarget, postMarkdown) => {
 };
 
 const addButtons = async posts => {
-  const postObjects = await necromancePostObjects(posts);
+  const postObjects = await getPosts(posts);
+  console.log(postObjects);
   posts.forEach(async (post, i) => {
     if (post.getAttribute(customAttribute)) return; // Masonry Tweaks seems to trigger this multiple times per post before the filter kicks in
 
     post.setAttribute(customAttribute, showBoth ? 'showBoth' : 'switch');
-    if (!postObjects[i]) postObjects[i] = await summonLivePost(post.dataset.postId, post.dataset.author);
     if (!postObjects[i]) return; // If blob is outdated
     const { body, additions } = postObjects[i];
     const chainAdditions = Array.from(post.querySelectorAll('.chain-addition-body'));

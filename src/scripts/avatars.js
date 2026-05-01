@@ -1,7 +1,7 @@
 import { cacheAvatar, getCachedAvatar, getUsersShallow } from './utils/users.js';
 import { getOptions, uniqueFn } from './utils/jsTools.js';
 import { postFunction } from './utils/mutation.js';
-import { necromancePostShallow } from './utils/necromancy.js';
+import { getPostShallow } from './utils/postDaemon.js';
 import { noact } from './utils/noact.js';
 
 const customClass = 'tailfeather-avatars';
@@ -10,7 +10,7 @@ const customAttribute = 'data-tf-avatars';
 let floatingAvatars, square;
 
 const avatarise = async posts => {
-  const shallowData = posts.map(necromancePostShallow);
+  const shallowData = posts.map(getPostShallow);
   const postUsers = shallowData.flatMap(({ author, originalAuthor, chain }) => [author, originalAuthor, ...chain.map(({ author }) => author)]).filter(u => !!u).filter(uniqueFn);
   await getUsersShallow(postUsers).then(users => users.filter(u => !!u).forEach(({ username, avatar_url }) => cacheAvatar(username, avatar_url)));
 

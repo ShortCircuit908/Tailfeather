@@ -1,6 +1,6 @@
 import { postFunction } from './utils/mutation.js';
 import { getOptions } from './utils/jsTools.js';
-import { necromancePostShallow } from './utils/necromancy.js';
+import { getPostShallow } from './utils/postDaemon.js';
 
 const normalizeRegex = /[^\w-,]/g;
 const customAttribute = 'data-tf-safeScroll';
@@ -22,7 +22,7 @@ function removeOnClick(event) {
   this.removeEventListener('click', removeOnClick);
 }
 const filterPosts = posts => posts.forEach(post => {
-  const { author, originalAuthor, tags, chain } = necromancePostShallow(post);
+  const { author, originalAuthor, tags, chain } = getPostShallow(post);
   const chainAuthors = chain.map(({ author }) => author);
   const chainTags = chain.flatMap(({ tags }) => tags);
   tags.push(...chainTags);

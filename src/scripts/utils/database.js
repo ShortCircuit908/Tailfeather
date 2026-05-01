@@ -1,4 +1,4 @@
-const DB_VERSION = 4; // database version
+const DB_VERSION = 5; // database version
 const EXPIRY_TIME = 86400000; // period after which data is considered expired
 export const txOptions = { durability: 'relaxed' }; // more performant
 
@@ -7,7 +7,7 @@ const updateEvent = 'tailfeather-database-update';
 const conditionalCreateStore = (db, storeName, options) => {
   if (!db.objectStoreNames.contains(storeName)) db.createObjectStore(storeName, options);
 };
-const conditionalCreateIndex = (store, indexName, keyPath, options) => {
+const conditionalCreateIndex = (store, indexName, keyPath, options = { unique: false }) => {
   if (!store.indexNames.contains(indexName)) {
     store.createIndex(indexName, keyPath, options);
   }
@@ -33,7 +33,10 @@ export const openDatabase = async () => new Promise((resolve, reject) => {
     const db = event.target.result;
     const tx = event.target.transaction;
 
-    conditionalCreateStore(db, 'postStore', { keyPath: 'post_id' });
+    conditionalCreateStore(db, 'postStore', { keyPath: 'post_id' }); // slated for removal after migration
+    conditionalCreateStore(db, 'rootStore', { keyPath: 'post_id' });
+    conditionalCreateStore(db, 'additionStore', { keyPath: 'addition_id' });
+    conditionalCreateStore(db, 'tipStore', { keyPath: 'post_id' });
     conditionalCreateStore(db, 'userStore', { keyPath: 'username' });
     conditionalCreateStore(db, 'userBookStore', { keyPath: 'username' });
     conditionalCreateStore(db, 'searchStore', { keyPath: 'post_id' });
@@ -41,24 +44,36 @@ export const openDatabase = async () => new Promise((resolve, reject) => {
     tx.oncomplete = () => { // upgrade transaction must finish before we can open a transaction to access objectStores and open indices
       const indextx = db.transaction(['postStore', 'userStore', 'userBookStore', 'searchStore']);
       const postStore = indextx.objectStore('postStore');
-      conditionalCreateIndex(postStore, 'post_id', 'post_id', { unique: true });
-      conditionalCreateIndex(postStore, 'created_at', 'created_at', { unique: false });
-      conditionalCreateIndex(postStore, 'stored_at', 'stored_at', { unique: false });
+      conditionalCreateIndex(postStore, 'created_at', 'created_at');
+      conditionalCreateIndex(postStore, 'stored_at', 'stored_at');
+
+      const rootStore = indextx.objectStore('rootStore');
+      conditionalCreateIndex(rootStore, 'created_at', 'created_at');
+      conditionalCreateIndex(rootStore, 'author', 'author');
+      conditionalCreateIndex(rootStore, 'tags', 'tags', { multientry: true });
+
+      const additionStore = indextx.objectStore('additionStore');
+      conditionalCreateIndex(additionStore, 'by_post_id', 'post_id', { unique: true });
+      conditionalCreateIndex(additionStore, 'created_at', 'created_at');
+      conditionalCreateIndex(additionStore, 'author', 'author');
+      conditionalCreateIndex(additionStore, 'tags', 'tags', { multientry: true });
+
+      const tipStore = indextx.objectStore('tipStore');
+      conditionalCreateIndex(tipStore, 'stapled_at', 'stapled_at');
+      conditionalCreateIndex(tipStore, '_blob_owner', '_blob_owner');
+      conditionalCreateIndex(tipStore, 'root_post_id', 'root_post_id'); // not unique because multiple tips can share a root
 
       const userStore = indextx.objectStore('userStore');
-      conditionalCreateIndex(userStore, 'username', 'username', { unique: true });
-      conditionalCreateIndex(userStore, 'display_name', 'display_name', { unique: false });
-      conditionalCreateIndex(userStore, 'stored_at', 'stored_at', { unique: false });
+      conditionalCreateIndex(userStore, 'display_name', 'display_name');
+      conditionalCreateIndex(userStore, 'stored_at', 'stored_at');
 
       const userBookStore = indextx.objectStore('userBookStore');
-      conditionalCreateIndex(userBookStore, 'username', 'username', { unique: true });
-      conditionalCreateIndex(userBookStore, 'display_name', 'display_name', { unique: false });
-      conditionalCreateIndex(userBookStore, 'stored_at', 'stored_at', { unique: false });
+      conditionalCreateIndex(userBookStore, 'display_name', 'display_name');
+      conditionalCreateIndex(userBookStore, 'stored_at', 'stored_at');
 
       const searchStore = indextx.objectStore('searchStore');
-      conditionalCreateIndex(searchStore, 'post_id', 'post_id', { unique: true });
-      conditionalCreateIndex(searchStore, 'quick_info', 'quick_info', { unique: false });
-      conditionalCreateIndex(searchStore, 'storedAt', 'storedAt', { unique: false });
+      conditionalCreateIndex(searchStore, 'quick_info', 'quick_info');
+      conditionalCreateIndex(searchStore, 'storedAt', 'storedAt');
 
       console.info(`[FDB] Updated database from v${event.oldVersion} to v${event.newVersion}`)
     };
@@ -261,7 +276,7 @@ const resourceQueue = new WeakMap();
  */
 export const getIndexedResources = async (store, keys, options = null) => {
   const isArray = Array.isArray(keys); // need to save the initial key state before arrayifying it
-  keys = [keys].flat();
+  if (!isArray) keys = [keys];
   const mapKey = [store, keys, options];
 
   if (!resourceQueue.has(mapKey)) {

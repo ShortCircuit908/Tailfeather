@@ -58,6 +58,12 @@ export const uniqueFn = (val, i, arr) => i === arr.indexOf(val)
  */
 export const unique = array => array.filter(uniqueFn);
 
+export const definedFn = v => !!v;
+
+export const defined = array => array.filter(definedFn);
+
+export const uniqueDefined = array => defined(unique(array));
+
 /**
  * @param {string} name - Name of file
  * @returns {Promise<object|null>} data

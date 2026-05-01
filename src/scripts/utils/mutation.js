@@ -1,4 +1,4 @@
-import { enthrallPosts } from './necromancy.js';
+import { cacheFromDOM } from './postDaemon.js';
 import { postSelector } from './document.js';
 import { addNavigationListener, navigationListeners, removeNavigationListener } from './navigation.js';
 
@@ -246,7 +246,7 @@ export const postFunction = Object.freeze({ // old PF interface but with a new c
     for (const [func, filter] of postFunction.functions) {
       filter ? func(posts.filter(post => post.matches(filter))) : func(posts)
     }
-    enthrallPosts(posts);
+    cacheFromDOM(posts);
   },
 
   /**
