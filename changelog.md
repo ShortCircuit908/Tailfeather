@@ -1,3 +1,9 @@
+# v1.4.0
+
+## General
+
+- Major behind-the-scenes changes to overhaul post wrangling for Noterook's post fragment system
+
 # v1.3.2
 
 ## General
