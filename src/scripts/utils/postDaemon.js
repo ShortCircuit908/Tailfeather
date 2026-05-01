@@ -65,9 +65,9 @@ function _usersFromFragments(roots, chainTips) {
  * @param {object} blob - user blob
  * @returns {object?} fragments, null if blob data contains an error 
  */
-function _unwrapBlob(blob) {
-  if (blob.error || !blob) {
-    console.warn(`[Solidifer] Failed to obtain blob`, blob);
+function _unwrapBlob(blob, username) {
+  if (!blob || blob.error) {
+    console.warn(`[Solidifer] Failed to obtain blob for user ${username}`, blob);
     return;
   }
 
@@ -82,13 +82,13 @@ function _unwrapBlob(blob) {
  */
 async function _fetchUserBlobs(usernames) {
   const userBlobs = await _pMap(usernames, fetchBlobCached);
-  const blobFragments = defined(userBlobs.map(_unwrapBlob));
+  const blobFragments = defined(userBlobs.map((blob, i) => _unwrapBlob(blob, usernames[i])));
   const rootFragments = new Map(), additionFragments = new Map(), chainTips = new Map();
 
   blobFragments.forEach(({ root_fragments, addition_fragments, chain_tips }) => {
-    root_fragments.forEach(root => rootFragments.set(root.post_id, root));
-    addition_fragments.forEach(addition => additionFragments.set(addition.addition_id, addition));
-    chain_tips.forEach(tip => chainTips.set(tip.post_id, tip));
+    root_fragments?.forEach(root => rootFragments.set(root.post_id, root));
+    addition_fragments?.forEach(addition => additionFragments.set(addition.addition_id, addition));
+    chain_tips?.forEach(tip => chainTips.set(tip.post_id, tip));
   });
 
   updateData({
@@ -99,9 +99,9 @@ async function _fetchUserBlobs(usernames) {
   });
 
   return {
-    rootFragments: Object.fromEntries(rootFragments.entries()),
-    additionFragments: Object.fromEntries(additionFragments.entries()),
-    chainTips: Object.fromEntries(chainTips.entries())
+    rootFragments: [...rootFragments.values()],
+    additionFragments: [...additionFragments.values()],
+    chainTips: [...chainTips.values()]
   };
 }
 
@@ -280,7 +280,7 @@ document.addEventListener('nr:new_post', _cachePostsFromSSE);
  */
 
 /**
- * root_fragments:
+ * addition_fragments:
  * "one row per signed addition; the
  * by_post_id index supports the hot
  * "every addition on this root" path
@@ -483,16 +483,15 @@ export async function getPosts(articles) {
   const indexedPosts = await getIndexedPosts(shallowData.map(({ post_id }) => post_id));
 
   if (!shallowData.every(({ post_id }) => indexedPosts[post_id])) {
-    const missedIndices = new Set(), missedUsers = new Set();
+    const missedUsers = new Set();
 
     shallowData.forEach(({ author, post_id }) => {
       if (!indexedPosts[post_id]) {
-        missedIndices.add(post_id);
         missedUsers.add(author);
       }
     });
 
-    const { rootFragments, additionFragments, chainTips } = await _fetchUserBlobs(missedUsers);
+    const { rootFragments, additionFragments, chainTips } = await _fetchUserBlobs([...missedUsers.values()]);
     _mapChainTipsToDisplayObjectEntries(rootFragments, additionFragments, chainTips).forEach(post => indexedPosts[post.post_id] = post);
   }
 

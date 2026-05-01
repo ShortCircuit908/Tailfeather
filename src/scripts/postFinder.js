@@ -1,5 +1,6 @@
-import { promisifyIDBRequest, openDatabase, updateData, getIndexedPosts, txOptions } from './utils/database.js';
-import { unique, debounce, getOptions } from './utils/jsTools.js';
+import { promisifyIDBRequest, openDatabase, updateData, txOptions } from './utils/database.js';
+import { getIndexedPosts } from './utils/postDaemon.js';
+import { unique, definedFn, debounce, getOptions } from './utils/jsTools.js';
 import { noact } from './utils/noact.js';
 import { svgIcon } from './utils/icons.js';
 import { getProcessor } from './utils/markdown.js';
@@ -9,7 +10,7 @@ import { resolveAvatar } from './utils/users.js';
 const customClass = 'tailfeather-postFinder';
 
 let db, splitMode, maxResults, resultSection, postIndices, searchableIndices;
-const textSeparator = 'φ(,)';
+// const textSeparator = 'φ(,)';
 const querySeparators = {
   comma: ',',
   space: ' '
@@ -107,8 +108,6 @@ const unstringifyHits = hit => {
   const opaqueHit = structuredClone(hit); // de-xraying
   const parsedInfo = JSON.parse(opaqueHit.quick_info);
 
-  parsedInfo.texts && (parsedInfo.texts = parsedInfo.texts.split(textSeparator));
-  parsedInfo.users && (parsedInfo.users = parsedInfo.users.split(','));
   parsedInfo.tags && (parsedInfo.tags = parsedInfo.tags.split(','));
 
   return Object.assign(opaqueHit, { quick_info: parsedInfo });
@@ -140,7 +139,7 @@ const newSearchProgress = () => noact({
 });
 
 const keywordSearch = async (keywords, start = 0) => {
-  keywords = keywords.filter(isDefined).map(v => v.toLowerCase());
+  keywords = keywords.filter(definedFn).map(v => v.toLowerCase());
   const tx = db.transaction('searchStore', 'readonly');
   const hits = [];
   let i = 0, lowerBound = start, dumped = 0;
@@ -179,7 +178,7 @@ const keywordSearch = async (keywords, start = 0) => {
   cursorStatus.disableAutoSync();
   console.debug(`[PostFinder] Searched ${cursorStatus.index - start} indices in ${performance.now() - t0}ms`);
 
-  return hits.map(unstringifyHits).sort((a, b) => (new Date(b.quick_info.updated_at)) - (new Date(a.quick_info.updated_at)));
+  return hits.map(unstringifyHits).sort((a, b) => (new Date(b.quick_info.created_at)) - (new Date(a.quick_info.created_at)));
 };
 
 const categorySearch = async ({ users, texts, tags, date }) => keywordSearch([users, texts, tags, date].flat());
@@ -192,13 +191,11 @@ const strictCategorySearch = async ({ users, texts, tags, date }) => categorySea
     const { quick_info } = postInfo;
     let n = 0;
 
-    if (quick_info.users?.length && users.length
-      && users.every(searchedBlog => quick_info.users.includes(searchedBlog))) ++n;
-    if (quick_info.texts?.length && texts.length
-      && quick_info.texts.some(postText => texts.some(text => postText.includes(text)))) ++n;
+    if (users.length && users.every(searchedBlog => quick_info.author === searchedBlog || quick_info.display_name === searchedBlog)) ++n; // stupid but mirrors legacy/tumblr behaviour
+    if (texts.length && texts.every(text => quick_info.body.includes(text))) ++n;
     if (quick_info.tags?.length && tags.length
       && tags.every(searchedTag => quick_info.tags.includes(searchedTag))) ++n;
-    if (date.length && date.some(d => quick_info.updated_at?.includes(d))) ++n;
+    if (date.length && date.some(d => quick_info.created_at?.includes(d))) ++n; // multiple dates is also obsoleted
 
     if (n === threshold) matches.push(postInfo);
   });
@@ -206,39 +203,26 @@ const strictCategorySearch = async ({ users, texts, tags, date }) => categorySea
   return matches;
 });
 
-const isDefined = x => !!x;
-
-const quick_info = ({ post_id, author, author_name, author_avatar, body, tags, additions, stapled_by, updated_at }) => {
-  const userObjects = [
-    {
-      username: author,
-      display_name: author_name,
-    },
-    ...additions.map(({ author: chain_author, author_name: chain_author_name }) => ({
-      username: chain_author,
-      display_name: chain_author_name
-    }))
-  ].filter(isDefined);
-  const contentStr = [body, ...additions.map(({ body: addition_body }) => addition_body)]
-    .map(markdown => getProcessor().renderStrict(markdown))
-    .filter(isDefined).join(textSeparator).toLowerCase();
-  const tagStr = unique([...tags, ...additions.flatMap(({ tags }) => tags)]).filter(isDefined).join(',').toLowerCase();
+const quickInfo = ({ post_id, author, author_name, author_avatar, body, tags, created_at }) => {
+  const contentStr = getProcessor().renderStrict(body);
+  const tagStr = unique(tags || []).join(',').toLowerCase(); // should hunt down where undefined tags are coming from but
 
   return JSON.stringify({
     post_id,
-    author: author,
-    avatar_url: author_avatar,
-    users: unique([stapled_by, ...userObjects.flatMap(({ username, display_name }) => [username, display_name])]).filter(isDefined).join(','),
-    texts: contentStr,
+    author,
+    author_name,
+    author_avatar,
+    body: contentStr,
     tags: tagStr,
-    updated_at
+    created_at
   });
 };
 
-const indexPosts = async (force = false) => {
+const indexFragments = async (force = false) => {
   if (force) indexProgress.progress = 0;
-  const tx = db.transaction(['postStore', 'searchStore'], 'readwrite', txOptions);
-  const postStore = tx.objectStore('postStore');
+  const tx = db.transaction(['rootStore', 'additionStore', 'searchStore'], 'readwrite', txOptions);
+  const rootStore = tx.objectStore('rootStore');
+  const additionStore = tx.objectStore('additionStore');
   const searchStore = tx.objectStore('searchStore');
   let i = 0, lowerBound = 0;
 
@@ -246,13 +230,17 @@ const indexPosts = async (force = false) => {
   indexProgress.enableAutoSync();
 
   while (indexProgress.progress < indexProgress.total) {
-    const storeEntries = new Set(await promisifyIDBRequest(postStore.getAll(IDBKeyRange.lowerBound(lowerBound, true), BATCH_SIZE))); // dumping the store into a set is VASTLY more performant than using a cursor
+    const rootEntries = new Set(await promisifyIDBRequest(rootStore.getAll(IDBKeyRange.lowerBound(lowerBound, true), BATCH_SIZE)));
+    const additionEntries = new Set(await promisifyIDBRequest(additionStore.getAll(IDBKeyRange.lowerBound(lowerBound, true), BATCH_SIZE)));
+    // dumping the stores into a set is VASTLY more performant than using a cursor
+    const storeEntries = rootEntries.union(additionEntries);
 
     storeEntries.forEach(post => {
-      if (!searchableIndices.has(post.post_id) || force) {
-        const searchable = { post_id: post.post_id, quick_info: quick_info(post), stored_at: Date.now() };
+      if (post.postId && !searchableIndices.has(post.post_id) || force) { // some really busted artifacts don't have post ids apparently (add-19d02d1f8fd-a13905a9)
+        const searchable = { post_id: post.post_id, quick_info: quickInfo(post), stored_at: Date.now() };
         searchableIndices.add(post.post_id);
         searchStore.put(searchable);
+
         ++i;
       }
 
@@ -273,13 +261,13 @@ const indexPosts = async (force = false) => {
 };
 
 const indexFromUpdate = async ({ detail: { targets } }) => { // take advantage of dispatched events to index new posts for free without opening extra transactions
-  if ('postStore' in targets) {
+  if (['rootStore', 'additionStore'].some(store => store in targets)) {
     updateData({
-      searchStore: [targets.postStore].flat().map(post => {
-        if (postIndices.has(post.post_id)) postIndices.add(post.post_id);
-        if (!searchableIndices.has(post.post_id)) {
-          if (searchableIndices.has(post.post_id)) searchableIndices.add(post.post_id);
-          return { post_id: post.post_id, quick_info: quick_info(post) };
+      searchStore: [targets.rootStore || [], targets.additionStore || []].flat().map(fragment => {
+        if (postIndices.has(fragment.post_id)) postIndices.add(fragment.post_id);
+        if (!searchableIndices.has(fragment.post_id)) {
+          if (searchableIndices.has(fragment.post_id)) searchableIndices.add(fragment.post_id);
+          return { post_id: fragment.post_id, quick_info: quickInfo(fragment), stored_at: Date.now() };
         }
       }).filter(s => !!s)
     }).then(() => cursorStatus.remaining = searchableIndices.size);
@@ -374,7 +362,7 @@ const renderResults = async (hits, replace = true) => {
   }
 
   const posts = await getIndexedPosts(hits.map(({ post_id }) => post_id));
-  const results = posts.map(renderResult);
+  const results = Object.values(posts).filter(definedFn).map(renderResult);
   let resultLabel = newResultCounter();
 
   if (replace) resultSection.replaceChildren(resultLabel, ...results);
@@ -406,7 +394,7 @@ const paginationManager = async (hits, page = 1) => {
 async function onKeywordSearch({ target }) {
   let keywords = target.value;
 
-  keywords = keywords.split(querySeparators[splitMode]).map(v => v.trim()).filter(isDefined);
+  keywords = keywords.split(querySeparators[splitMode]).map(v => v.trim()).filter(definedFn);
   if (splitMode === 'space') keywords = keywords.map(v => v.replace(/_/g, ' '));
 
   if (!(keywords.length)) {
@@ -421,7 +409,7 @@ async function onAdvancedSearch() {
   const date = document.getElementById('postFinder-advanced-date').value;
   let keywordCategories = ['users', 'text', 'tags'].map(v => document.getElementById(`postFinder-advanced-${v}`).value);
 
-  keywordCategories = keywordCategories.map(keywords => keywords.split(querySeparators[splitMode]).map(v => v.trim()).filter(isDefined));
+  keywordCategories = keywordCategories.map(keywords => keywords.split(querySeparators[splitMode]).map(v => v.trim()).filter(definedFn));
 
   if (splitMode === 'space') keywordCategories = keywordCategories.map(keywords => keywords.map(v => v.replace(/_/g, ' ')));
 
@@ -653,9 +641,12 @@ const searchWindow = noact({
 export const main = async () => {
   ({ splitMode, maxResults } = await getOptions('postFinder'));
   db = await openDatabase();
-  const tx = db.transaction(['postStore', 'searchStore'], 'readonly', txOptions);
+  const tx = db.transaction(['rootStore', 'additionStore', 'searchStore'], 'readonly', txOptions);
 
-  postIndices = new Set(await promisifyIDBRequest(tx.objectStore('postStore').getAllKeys()));
+  const rootIndices = new Set(await promisifyIDBRequest(tx.objectStore('rootStore').getAllKeys()));
+  const additionIndices = new Set(await promisifyIDBRequest(tx.objectStore('additionStore').getAllKeys()));
+
+  postIndices = rootIndices.union(additionIndices);
   searchableIndices = new Set(await promisifyIDBRequest(tx.objectStore('searchStore').getAllKeys()));
 
   document.querySelector('.nav-container [href="/search/"]').insertAdjacentElement('afterend', navButton);
@@ -672,7 +663,7 @@ export const main = async () => {
 
   if (indexProgress.progress >= indexProgress.total) hideStatus();
 
-  indexPosts();
+  indexFragments();
   window.addEventListener('tailfeather-database-update', indexFromUpdate);
 };
 

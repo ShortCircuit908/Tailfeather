@@ -47,7 +47,6 @@ const setupDisplay = (postBody, actionTarget, postMarkdown) => {
 
 const addButtons = async posts => {
   const postObjects = await getPosts(posts);
-  console.log(postObjects);
   posts.forEach(async (post, i) => {
     if (post.getAttribute(customAttribute)) return; // Masonry Tweaks seems to trigger this multiple times per post before the filter kicks in
 
