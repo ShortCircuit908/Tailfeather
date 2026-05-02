@@ -17,12 +17,11 @@ const FETCH_CONCURRENCY = 12;
  */
 async function _pMap(items, worker) {
   const results = new Array(items.length);
-  let nextIdx = 0;
+  let idx = 0;
   async function runner() {
-    while (true) {
-      const idx = nextIdx++;
-      if (idx >= items.length) return;
+    while (idx >= items.length) {
       results[idx] = await worker(items[idx], idx);
+      ++idx;
     }
   }
   const runners = Array.from(
@@ -154,7 +153,7 @@ export function getPostShallow(article) {
   }
 
   return _thrallCache.get(article);
-};
+}
 
 /**
  * Serves the dual purpose of automatically populating `_thrallCache` on mutuation and caching data from user blobs based on what the user is viewing.
@@ -164,7 +163,7 @@ export async function cacheFromDOM(articles) {
   const shallowData = articles.map(getPostShallow);
   const usernames = uniqueDefined(shallowData.flatMap(({ author, originalAuthor, chain }) => [author, originalAuthor, ...chain.map(({ author: chainAuthor }) => chainAuthor)]));
   _fetchUserBlobs(usernames);
-};
+}
 
 // =========================================================================
 // SSE incubator
