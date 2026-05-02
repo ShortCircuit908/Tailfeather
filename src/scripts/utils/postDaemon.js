@@ -325,7 +325,7 @@ document.addEventListener('nr:new_post', _cachePostsFromSSE);
  *  pinned_at: {string?} timestamp if pinned, null otherwise
  *  updated_at: {string}
  *  chain_version: {number} no. of additions
- *  chain_tip_id: {string} id of last opaque addition?
+ *  chain_tip_id: {string} addition id of last opaque addition if relevant
  *  original_tags: {string[]}
  *  root_signature: {string}
  * }
@@ -388,6 +388,9 @@ function _createDisplayObject(rootFragment, additionFragments, chainTip) {
 
   return {
     author: chainTip._blob_owner,
+    root_author: rootFragment.author_name,
+    root_author_name: rootFragment.author,
+    root_author_avatar: rootFragment.author_avatar,
     additions: additionFragments.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at)),
     answered_ask: rootFragment.answered_ask,
     body: rootFragment.body,

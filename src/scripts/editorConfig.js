@@ -20,7 +20,7 @@ const transformStyle = cssText => (cssText.trim() && cssText !== DEFAULT_CSS) ? 
 
 // initEditor could technically handle its own option handling and skip having the main window
 // pass feature options entirely, but that would require it to be async, so might as well not
-const initEditor = ({ blog, userBlogs, defaultContent, defaultCss, theme, nrTheme, keybinding, trustedImageHosts, trustedMediaHosts, trustedStylesheetHosts }) => {
+const initEditor = ({ blog, userBlogs, defaultContent, defaultCss, defaultTags, theme, nrTheme, keybinding, trustedImageHosts, trustedMediaHosts, trustedStylesheetHosts }) => {
   console.debug('[EditorConfig] Ace loaded', blog, defaultContent, defaultCss, theme, keybinding);
   let activeBlog = blog;
 
@@ -50,6 +50,9 @@ const initEditor = ({ blog, userBlogs, defaultContent, defaultCss, theme, nrThem
     keyboardHandler: `ace/keyboard/${keybinding}`
   });
 
+  defaultTags ??= [];
+  if (defaultTags.length) document.getElementById('composer-tags').value = defaultTags.join(', ');
+
   window.onresize = function () {
     editor.resize();
     cssEditor.resize();
@@ -57,14 +60,15 @@ const initEditor = ({ blog, userBlogs, defaultContent, defaultCss, theme, nrThem
 
   getStorage(['preferences']).then(({ preferences }) => preferences.themes?.enabled ? Themes.main() : null);
 
-  const [_, qualifier, qualifierId] = /\?(.+)=(.+)$/.exec(location.search) || [];
-
   switch (qualifier) {
     case 'additionToPost':
       submitButton.textContent = 'Add';
       break;
     case 'answerToAsk':
       submitButton.textContent = 'Answer';
+      break;
+    case 'editingPost':
+      submitButton.textContent = 'Edit';
       break;
     case 'asking':
       submitButton.textContent = 'Send';
@@ -79,8 +83,10 @@ const initEditor = ({ blog, userBlogs, defaultContent, defaultCss, theme, nrThem
     document.getElementById('tf-author-name').textContent = newBlog.display_name;
   }
 
-  const editorSwitcher = blogSwitcher(switchActive, userBlogs, activeBlog, 'Switch composing blog');
-  document.getElementById('editor-header').append(editorSwitcher);
+  if (userBlogs !== null) {
+    const editorSwitcher = blogSwitcher(switchActive, userBlogs, activeBlog, 'Switch composing blog');
+    document.getElementById('editor-header').append(editorSwitcher);
+  }
 
   document.getElementById('tf-preview').append(noact({
     className: 'post-card',
@@ -164,7 +170,10 @@ const initEditor = ({ blog, userBlogs, defaultContent, defaultCss, theme, nrThem
   cssEditor.on('change', debounce(updateBody, 300));
 };
 
-window.parent.postMessage('frameInit', uri);
+const [_, qualifier, qualifierId] = /\?(.+)=(.+)$/.exec(location.search) || [];
+
+if (qualifier === 'editingPost') window.parent.postMessage({ editingPostId: qualifierId }, uri);
+else window.parent.postMessage('frameInit', uri);
 
 const listener = event => {
   if (event.origin !== uri) return;

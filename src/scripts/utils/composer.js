@@ -111,11 +111,10 @@ export async function createPost(body, tagsInput, blog, options = {}) {
 
   const postId = options.postId || generatePostId();
   const tags = parseTags(tagsInput);
-  const createdAt = new Date().toISOString();
+  const createdAt = options.createdAt || new Date().toISOString();
 
   // Unlike Noterook, we support posting from non-active blogs
   // Opposite priority here: fallback to getActiveBlog()
-
   if (!blog) {
     try {
       blog = getActiveBlog();
@@ -190,12 +189,12 @@ export async function createPost(body, tagsInput, blog, options = {}) {
   await BookStore.openDatabase(userInfo.id).then(() => BookStore.storePost(post));
 
   // Register tags with server (non-blocking) - skip if hidden from search
-  if (!options.hideFromSearch) {
+  if (!(options.hideFromSearch || options.editing)) {
     registerTags(postId, tags);
   }
 
   // Notify followers via SSE relay (non-blocking)
-  if (!options.hideFromSearch) {
+  if (!(options.hideFromSearch || options.editing)) {
     sendPostEvent(post, 'new_post', authorUsername);
   }
 
