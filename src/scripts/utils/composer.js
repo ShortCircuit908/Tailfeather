@@ -213,6 +213,158 @@ export async function createPost(body, tagsInput, blog, options = {}) {
   return post;
 }
 
+// i can't wait for fragment migration...
+export async function editCompositeRoot(post, blog, { body, tagStr, createdAt }) {
+  if (!post) throw new Error('[TF-Composer] No composite provided');
+
+  const actingUsername = blog.username;
+  const actingDisplay = blog.displayName || blog.display_name || blog.username;
+
+  if (!body || !body.trim()) throw new Error('[TF-Composer] Addition body cannot be empty');
+
+  // Strip inline base64 images before signing - same rationale as
+  // createPost. Additions get stapled around with their parent so
+  // letting one through bloats every downstream staple too.
+  body = stripInlineDataImages(body);
+
+  if (body.length > MAX_POST_BODY_LENGTH) throw new Error(`[TF-Composer] Post too long (${body.length.toLocaleString()} / ${MAX_POST_BODY_LENGTH.toLocaleString()} chars)`);
+
+  const tags = parseTags(tagStr);
+  const postId = post.post_id
+
+  // Build signable content
+  // Fields must match what verifyBlob() reconstructs in blob-manager.js
+  const signable = {
+    post_id: post.root_post_id,
+    author: blog.username,
+    body: body,
+    tags: tags,
+    created_at: createdAt,
+  };
+
+  // Sign with the ACTING BLOG's Ed25519 private key: legacy blogs
+  // use the account-level key (null salt); sideblogs use the
+  // per-blog key cached at login (post-ensureBlogKeys). If no
+  // cache entry is present for the sideblog we fall back to the
+  // legacy key and a warning is logged - signature will mismatch
+  // on viewers but the post still reaches feeds; re-logging-in
+  // populates the cache.
+  let signature = '';
+  const privateKey = Signing.loadKeyForBlog(blog) || Signing.loadPrivateKey();
+  if (privateKey) {
+    try {
+      signature = await Signing.signPost(signable, privateKey);
+    } catch (err) {
+      console.error('[TF-Composer] Addition signing failed:', err);
+    }
+  }
+
+  // Create the new composite post.
+  //
+  // NOTE: explicit field copy, NOT a `...parent` spread. That's
+  // deliberate - a spread would forward stale / unrelated fields
+  // (server-added metadata, old shadow fields) onto the composite.
+  // But it means EVERY field the renderer expects has to appear
+  // below. Past bugs: `answered_ask` missing here = ask card
+  // disappears on self-add (fixed in dbbe10d). `original_tags`
+  // missing = stapler tag-block launder (filter defense). If a new
+  // field is added to post_envelope.js, add it here too.
+  const newPost = {
+    // New identity
+    post_id: postId,
+    // Lineage. root_post_id falls back to the parent's own id for
+    // a non-stapled parent; this is what _verifyAttestation's
+    // rootPostId match relies on for self-add-on-answer posts.
+    root_post_id: post.root_post_id || post.post_id,
+    // Original post content (the root's body/author travel with the chain)
+    body: post.body,
+    author: post.author,
+    author_name: post.author_name,
+    author_avatar: post.author_avatar || '',
+    media_urls: post.media_urls || [],
+    // updated signature of our modified root
+    root_signature: signature,
+    // The frozen chain
+    additions: post.additions,
+    chain_version: post.chain_version,
+    chain_tip_id: post.chain_tip_id,
+    // guarenteed to be the user's post, but that will change in the future
+    is_mine: post.is_mine,
+    is_stapled: post.is_stapled,
+    stapled_at: post.stapled_at,
+    stapled_by_blog: post.stapled_by_blog,
+    // Timestamps - preserve the original post's created_at so the
+    // header shows when the content was first written, not when this
+    // composite was made. updated_at tracks the latest activity.
+    created_at: createdAt,
+    updated_at: post.updated_at,
+    // Tags: addition's own tags are visible; original_tags carries
+    // the inherited (root + ancestor) tags so blacklist filtering
+    // still fires on downstream renders. inheritedTagsFromParent
+    // handles the composite-vs-root distinction and the `[]`
+    // truthy gotcha that previously broke SSE-received roots.
+    tags: post.tags || [],
+    original_tags: tags,
+    // Fresh post - not pinned
+    is_pinned: post.is_pinned,
+    pinned_at: post.pinned_at,
+    // Respect the original author's visibility preference
+    hide_from_search: post.hide_from_search || 0,
+    // Carry the parent's answered_ask attestation forward. The
+    // attestation's answer_post_id names the PARENT's id, not this
+    // composite's, so post-card's verifier accepts match against
+    // either post_id or root_post_id. Without this propagation, a
+    // self-add turns a verified answer into an unattributed chain
+    // composite and the ask card disappears from the chain.
+    answered_ask: post.answered_ask || null,
+    // Stamp the blob owner immediately so the first render (before
+    // the blob round-trip) matches the post-round-trip render
+    // context. Two consequences worth being explicit about:
+    //
+    //   Self-add to own answered post: `_blob_owner === post.author
+    //   === attestation.recipient === user`. The ask attribution
+    //   verifies and renders. This is the case Mel reported; the
+    //   stamp makes the first render succeed instead of briefly
+    //   showing stale context before the blob round-trips.
+    //
+    //   Cross-user add to someone else's answered post: e.g. Mel
+    //   adds to Bob's answer. `_blob_owner = Mel`, but the
+    //   attestation's recipient is Bob. `_verifyAttestation` uses
+    //   `_blob_owner` as the trusted author and rejects the
+    //   recipient match - the ask attribution does NOT render on
+    //   Mel's composite. This is intentional: the attestation
+    //   proves Bob answered the ask, not that Mel did, and surfacing
+    //   Bob's ask attribution on a post stored in Mel's book would
+    //   be misattribution. Server-side enforcement in api/posts.py
+    //   (send_post strips answered_ask when sender != attestation
+    //   recipient) is the matching defense on the SSE relay side.
+    _blob_owner: post._blob_owner || post.author,
+  };
+
+  console.debug('[TF-Editor] Edited composite:', newPost);
+
+  const { root_fragment, chain_tip } = fragmentDisplayObject(newPost);
+
+  // store the edited composite post
+  await BookStore.openDatabase(userInfo.id).then(() => BookStore.storePost(newPost));
+
+  /* // store updated fragments in the book
+  await BookStore.openDatabase(userInfo.id).then(() => {
+    BookStore.storeRootFragment(root_fragment);
+    BookStore.storeChainTip(chain_tip);
+  }); */
+
+  // store updated addition fragment to tailfeather store
+  await updateData({
+    rootStore: root_fragment,
+    tipStore: chain_tip
+  });
+
+  // as this is an edit, we don't need to publish tags or poke the SSE relay
+
+  return newPost;
+}
+
 export async function editAddition(parent, blog, { additionBody, additionTagStr, additionId, postId, createdAt }) {
   const actingUsername = blog.username;
   const actingDisplay = blog.displayName || blog.display_name || blog.username;

@@ -1,7 +1,7 @@
 import { svgIcon } from './utils/icons.js';
 import { noact } from './utils/noact.js';
 import { getActiveBlog, listBlogs } from './utils/activeBlogs.js';
-import { createPost, editAddition } from './utils/composer.js';
+import { createPost, editCompositeRoot, editAddition } from './utils/composer.js';
 import { getOptions } from './utils/jsTools.js';
 import { mutationManager, postFunction } from './utils/mutation.js';
 import { getOwnPost, getPosts } from './utils/postDaemon.js';
@@ -75,11 +75,19 @@ const listener = event => {
       let editPromise;
 
       if ('addition_id' in postData) {
+        // editing addition on composite
         editPromise = editAddition(postData.parent, blog, {
           additionBody: composerContent,
           additionTagStr: tagString,
           additionId: postData.addition_id,
           postId: postData.post_id,
+          createdAt: postData.created_at
+        });
+      } else if (postData.chain_version) {
+        // editing root of composite
+        editPromise = editCompositeRoot(postData, blog, {
+          body: composerContent,
+          tagStr: tagString,
           createdAt: postData.created_at
         });
       } else {
