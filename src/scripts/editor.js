@@ -222,6 +222,8 @@ const newEditButton = fragment => noact({
     } else postData = { ...post, authorBlog };
     editMap.set(postData.post_id, postData);
 
+    console.log(postData)
+
     openEditorIFrame(`?editing${'addition_id' in fragment ? 'Addition' : 'Post'}=${fragment.post_id}`);
   },
   children: svgIcon('commandline', 24, 24)
@@ -238,10 +240,12 @@ const addEditButtons = async articles => {
   articles.forEach((article, i) => {
     const post = posts[i];
     if (!post) return;
+    if (!blogs.some(({ username }) => username === post.author)) return;
 
-    const tipAuthor = post.chain_tip_id !== 'null' && post.additions.find(({ addition_id }) => addition_id === post.chain_tip_id)?.author;
+    const postTip = post.additions.find(({ addition_id }) => addition_id === post.chain_tip_id) || post;
 
-    [post, ...post.additions].forEach((fragment, i) => {
+    // probably borked until fragment migration is over with
+    /* [post, ...post.additions].forEach((fragment, i) => {
       const authorBlog = blogs.find(({ username }) => username === fragment.author);
       if (authorBlog) {
         const button = newEditButton(fragment);
@@ -249,7 +253,14 @@ const addEditButtons = async articles => {
         else if ('root_post_id' in fragment) article.querySelector('.post-author .post-timestamp').insertAdjacentElement('beforebegin', button);
         else article.querySelector(`.chain-addition[data-addition-id="${fragment.addition_id}"] .chain-addition-header .chain-addition-time`).insertAdjacentElement('beforebegin', button);
       }
-    });
+    }); */
+
+    // for now, we only support editing chain tips
+    const authorBlog = blogs.find(({ username }) => username === postTip?.author);
+    if (authorBlog) {
+      const button = newEditButton(postTip);
+      article.querySelector('[data-action="sticker"]').insertAdjacentElement('afterend', button);
+    }
   });
 };
 
