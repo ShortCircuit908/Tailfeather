@@ -5,6 +5,8 @@ import { fetchBlobCached } from './blobManager.js';
 import { defined, unique, uniqueDefined, uniqueFn } from './jsTools.js';
 import { extractUserFromHref, cacheAvatar } from './users.js';
 import { parseTags } from './composer.js';
+import * as BookStore from './bookStore.js';
+import { userInfo } from './activeBlogs.js';
 
 const FETCH_CONCURRENCY = 12;
 
@@ -234,7 +236,6 @@ function _cachePostsFromSSE({ detail }) {
   const post = _normalize(detail);
 
   if (post) updateData({
-    postStore: post,
     userStore: {
       username: post.author,
       avatar_url: post.author_avatar,
@@ -498,4 +499,75 @@ export async function getPosts(articles) {
   }
 
   return isArray ? shallowData.map(({ post_id }) => indexedPosts[post_id]) : Object.values(indexedPosts)[0];
+}
+
+/**
+ * wrapper for `BookStore.getPost()`
+ * resolves a post from the user's own book with high confidence
+ * @param {string} postId 
+ * @returns {object} composite post display object
+ */
+export async function getOwnPost(postId) {
+  return BookStore.openDatabase(userInfo.id).then(() => {
+    return BookStore.getPost(postId)
+  });
+}
+
+// =========================================================================
+// Post fragmentation utilities
+// =========================================================================
+// tools for fragmenting display objects
+
+/**
+ * fragments a display object into its component fragments
+ * @param {object} post - well-structure display object 
+ * @returns {object} key-value pairs of fragments
+ */
+export function fragmentDisplayObject(post) {
+  const root_fragment = {
+    kind: "root",
+    post_id: post.root_post_id || post.post_id,
+    author: post.author || post.author_username,
+    author_name: post.author_name || post.author || post.author_username,
+    author_avatar: post.author_avatar,
+    body: post.body,
+    tags: post.is_stapled ? post.tags : post.original_tags,
+    media_urls: post.media_urls || [],
+    created_at: post.created_at,
+    signature: post.root_signature,
+    hide_from_search: post.hide_from_search || 0,
+    answered_ask: post.answered_ask || null
+  };
+  const addition_fragments = post.additions?.map(addition => ({
+    kind: "addition",
+    addition_id: addition.addition_id,
+    post_id: addition.post_id,
+    author: addition.author || addition.author_username,
+    author_name: addition.author_name || addition.author || addition.author_username,
+    author_avatar: addition.author_avatar,
+    body: addition.body,
+    tags: addition.tags,
+    media_urls: addition.media_urls,
+    created_at: addition.created_at,
+    signature: addition.signature
+  })) || [];
+  const chain_tip = {
+    kind: "chain_tip",
+    post_id: post.post_id,
+    chain: post.additions?.map(({ addition_id }) => addition_id) || [],
+    root_post_id: post.root_post_id || post.post_id,
+    stapler_tags: post.is_stapled ? post.tags : null,
+    stapled_at: post.is_stapled ? post.updated_at : null,
+    stapled_by_blog: post.stapled_by,
+    _blob_owner: post.stapled_by || post.author,
+    is_pinned: post.is_pinned,
+    pinned_at: post.pinned_at || null,
+    updated_at: post.updated_at || post.created_at,
+    chain_version: post.chain_version,
+    chain_tip_id: post.chain_tip_id,
+    original_tags: post.original_tags,
+    root_signature: post.root_signature
+  };
+
+  return { root_fragment, addition_fragments, chain_tip };
 }

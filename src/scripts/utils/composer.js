@@ -2,6 +2,8 @@ import { apiFetch } from './apiFetch.js';
 import { getActiveBlog, userInfo } from './activeBlogs.js'
 import * as Signing from './signing.js';
 import * as BookStore from './bookStore.js';
+import { fragmentDisplayObject } from './postDaemon.js';
+import { updateData } from './database.js';
 
 const MAX_POST_BODY_LENGTH = 100_000;
 const MAX_ADDITION_BODY_LENGTH = 20_000;
@@ -189,6 +191,13 @@ export async function createPost(body, tagsInput, blog, options = {}) {
   // Store to IndexedDB (Single Gateway)
   await BookStore.openDatabase(userInfo.id).then(() => BookStore.storePost(post));
 
+  // store to tailfeather stores (fragmented)
+  const { root_fragment, chain_tip } = fragmentDisplayObject(post);
+  await updateData({
+    rootStore: root_fragment,
+    tipStore: chain_tip
+  });
+
   // Register tags with server (non-blocking) - skip if hidden from search
   if (!(options.hideFromSearch || options.editing)) {
     registerTags(postId, tags);
@@ -199,7 +208,7 @@ export async function createPost(body, tagsInput, blog, options = {}) {
     sendPostEvent(post, 'new_post', authorUsername);
   }
 
-  console.debug(`[TF-Composer] Successfully created post ${post.post_id}`, post, blog);
+  console.debug(`[TF-Composer] Successfully ${options.editing ? 'edited' : 'created'} post ${post.post_id}`, post, blog);
 
   return post;
 }
@@ -349,14 +358,25 @@ export async function editAddition(parent, blog, { additionBody, additionTagStr,
     _blob_owner: actingUsername,
   };
 
-  console.debug('[TF-Editor] Edited composite post:', {
-    newPostId: postId,
-    rootPostId: newPost.root_post_id,
-    chainLength: allAdditions.length,
-  });
+  console.debug('[TF-Editor] Edited addition:', addition);
+
+  const { addition_fragments, chain_tip } = fragmentDisplayObject(newPost);
+  const additionFragment = addition_fragments.find(({ addition_id }) => addition_id === additionId);
 
   // store the edited composite post
   await BookStore.openDatabase(userInfo.id).then(() => BookStore.storePost(newPost));
+
+  /* // store updated fragments in the book
+  await BookStore.openDatabase(userInfo.id).then(() => {
+    BookStore.storeAdditionFragment(additionFragment);
+    BookStore.storeChainTip(chain_tip);
+  }); */
+
+  // store updated addition fragment to tailfeather store
+  await updateData({
+    additionStore: additionFragment,
+    tipStore: chain_tip
+  });
 
   // as this is an edit, we don't need to publish tags or poke the SSE relay
 

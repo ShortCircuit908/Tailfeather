@@ -4,7 +4,7 @@ import { getActiveBlog, listBlogs } from './utils/activeBlogs.js';
 import { createPost, editAddition } from './utils/composer.js';
 import { getOptions } from './utils/jsTools.js';
 import { mutationManager, postFunction } from './utils/mutation.js';
-import { getPosts } from './utils/postDaemon.js';
+import { getOwnPost, getPosts } from './utils/postDaemon.js';
 
 // activeBlog imports are resolved here and not editorConfig.js because the iframe context is separate from the main window, so they would fail in the config module
 
@@ -70,7 +70,7 @@ const listener = event => {
       if (anonCheckbox) anonCheckbox.checked = askAnon;
       form.querySelector('.ask-modal-send').click();
       closeEditor({ type: 'click' });
-    } else if (qualifier === 'editingPost') {
+    } else if (['editingPost', 'editingAddition'].includes(qualifier)) {
       const postData = editMap.get(qualifierId);
       let editPromise;
 
@@ -83,7 +83,7 @@ const listener = event => {
           createdAt: postData.created_at
         });
       } else {
-        editPromise = createPost(composerContent, tagString, blog, { hideFromSearch, editingPost: true, postId: qualifierId, createdAt: postData.created_at });
+        editPromise = createPost(composerContent, tagString, blog, { hideFromSearch, editing: true, postId: qualifierId, createdAt: postData.created_at });
       }
 
       editPromise.then(() => {
@@ -195,12 +195,26 @@ const addAskFormControls = forms => forms.forEach(form => {
   }))
 });
 
-const newEditButton = postData => noact({
+const newEditButton = fragment => noact({
   className: `${customClass} post-action-btn`,
   title: 'Edit post in the custom editor',
-  onclick: function () {
+  onclick: async function () {
+    const post = await getOwnPost(fragment.post_id);
+    const blogs = listBlogs();
+    if (!blogs.length) {
+      console.error('[TF-Editor] Failed to obtain user blogs');
+      return;
+    }
+    const authorBlog = blogs.find(({ username }) => username === fragment.author);
+    let postData;
+
+    if ('addition_id' in fragment) {
+      const targetAddition = post.additions.find(({ addition_id }) => addition_id === fragment.addition_id);
+      postData = { ...targetAddition, parent: post, authorBlog };
+    } else postData = { ...post, authorBlog };
     editMap.set(postData.post_id, postData);
-    openEditorIFrame(`?editing${'addition_id' in postData ? 'Addition' : 'Post'}=${postData.post_id}`);
+
+    openEditorIFrame(`?editing${'addition_id' in fragment ? 'Addition' : 'Post'}=${fragment.post_id}`);
   },
   children: svgIcon('commandline', 24, 24)
 });
@@ -222,7 +236,7 @@ const addEditButtons = async articles => {
     [post, ...post.additions].forEach((fragment, i) => {
       const authorBlog = blogs.find(({ username }) => username === fragment.author);
       if (authorBlog) {
-        const button = newEditButton({ ...fragment, authorBlog, parent: post });
+        const button = newEditButton(fragment);
         if (!post.additions.length || post.chain_tip_id === fragment?.addition_id) article.querySelector('[data-action="sticker"]').insertAdjacentElement('afterend', button);
         else if ('root_post_id' in fragment) article.querySelector('.post-author .post-timestamp').insertAdjacentElement('beforebegin', button);
         else article.querySelector(`.chain-addition[data-addition-id="${fragment.addition_id}"] .chain-addition-header .chain-addition-time`).insertAdjacentElement('beforebegin', button);
