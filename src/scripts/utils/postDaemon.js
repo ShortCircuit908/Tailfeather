@@ -19,7 +19,7 @@ async function _pMap(items, worker) {
   const results = new Array(items.length);
   let idx = 0;
   async function runner() {
-    while (idx >= items.length) {
+    while (idx < items.length) {
       results[idx] = await worker(items[idx], idx);
       ++idx;
     }

@@ -4,6 +4,10 @@
 
 - Major behind-the-scenes changes to overhaul post wrangling for Noterook's post fragment system
 
+## Display Post Source Code
+
+- Fixed posts not showing source displays
+
 # v1.3.2
 
 ## General
