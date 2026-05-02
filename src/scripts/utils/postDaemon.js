@@ -234,6 +234,7 @@ function _cachePostsFromSSE({ detail }) {
   if (!detail) return;
 
   const post = _normalize(detail);
+  const { root_fragment, addition_fragments, chain_tip } = fragmentDisplayObject(post);
 
   if (post) updateData({
     userStore: {
@@ -241,11 +242,15 @@ function _cachePostsFromSSE({ detail }) {
       avatar_url: post.author_avatar,
       display_name: post.author_name,
       updated_at: post.updated_at
-    }
-  })
+    },
+    rootStore: root_fragment,
+    additionStore: addition_fragments,
+    tipStore: chain_tip
+  });
 }
 
 document.addEventListener('nr:new_post', _cachePostsFromSSE);
+document.addEventListener('nr:new_addition', _cachePostsFromSSE);
 
 // =========================================================================
 // Full post fetching utilities
