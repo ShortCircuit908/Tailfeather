@@ -1,7 +1,7 @@
 import { svgIcon } from './utils/icons.js';
 import { noact } from './utils/noact.js';
 import { getActiveBlog, listBlogs } from './utils/activeBlogs.js';
-import { createPost } from './utils/composer.js';
+import { createPost, editAddition } from './utils/composer.js';
 import { getOptions } from './utils/jsTools.js';
 import { mutationManager, postFunction } from './utils/mutation.js';
 import { getPosts } from './utils/postDaemon.js';
@@ -72,8 +72,21 @@ const listener = event => {
       closeEditor({ type: 'click' });
     } else if (qualifier === 'editingPost') {
       const postData = editMap.get(qualifierId);
+      let editPromise;
 
-      createPost(composerContent, tagString, blog, { hideFromSearch, editingPost: true, postId: qualifierId, createdAt: postData.created_at }).then(() => {
+      if ('addition_id' in postData) {
+        editPromise = editAddition(postData.parent, blog, {
+          additionBody: composerContent,
+          additionTagStr: tagString,
+          additionId: postData.addition_id,
+          postId: postData.post_id,
+          createdAt: postData.created_at
+        });
+      } else {
+        editPromise = createPost(composerContent, tagString, blog, { hideFromSearch, editingPost: true, postId: qualifierId, createdAt: postData.created_at });
+      }
+
+      editPromise.then(() => {
         closeEditor({ type: 'click' });
         editMap.delete(qualifierId);
       }, e => {
@@ -182,6 +195,16 @@ const addAskFormControls = forms => forms.forEach(form => {
   }))
 });
 
+const newEditButton = postData => noact({
+  className: `${customClass} post-action-btn`,
+  title: 'Edit post in the custom editor',
+  onclick: function () {
+    editMap.set(postData.post_id, postData);
+    openEditorIFrame(`?editing${'addition_id' in postData ? 'Addition' : 'Post'}=${postData.post_id}`);
+  },
+  children: svgIcon('commandline', 24, 24)
+});
+
 const addEditButtons = async articles => {
   const blogs = listBlogs();
   if (!blogs.length) {
@@ -196,20 +219,16 @@ const addEditButtons = async articles => {
 
     const tipAuthor = post.chain_tip_id !== 'null' && post.additions.find(({ addition_id }) => addition_id === post.chain_tip_id)?.author;
 
-    // if owned && opaque
-    if (blogs.some(({ username }) => username === post.author && (post.post_id === post.root_post_id || username === tipAuthor))) {
-      const authorBlog = blogs.find(({ username }) => username === post.author);
-      article.querySelector('[data-action="sticker"]').insertAdjacentElement('afterend', noact({
-        className: `${customClass} post-action-btn`,
-        title: 'Edit post in the custom editor',
-        onclick: function () {
-          editMap.set(post.post_id, { ...post, authorBlog });
-          openEditorIFrame(`?editingPost=${post.post_id}`);
-        },
-        children: svgIcon('commandline', 24, 24)
-      }));
-    }
-  })
+    [post, ...post.additions].forEach((fragment, i) => {
+      const authorBlog = blogs.find(({ username }) => username === fragment.author);
+      if (authorBlog) {
+        const button = newEditButton({ ...fragment, authorBlog, parent: post });
+        if (!post.additions.length || post.chain_tip_id === fragment?.addition_id) article.querySelector('[data-action="sticker"]').insertAdjacentElement('afterend', button);
+        else if ('root_post_id' in fragment) article.querySelector('.post-author .post-timestamp').insertAdjacentElement('beforebegin', button);
+        else article.querySelector(`.chain-addition[data-addition-id="${fragment.addition_id}"] .chain-addition-header .chain-addition-time`).insertAdjacentElement('beforebegin', button);
+      }
+    });
+  });
 };
 
 export const update = async options => ({ defaultContent, defaultCss, theme, keybinding } = options);

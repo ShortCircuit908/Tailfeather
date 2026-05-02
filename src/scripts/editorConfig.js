@@ -63,12 +63,17 @@ const initEditor = ({ blog, userBlogs, defaultContent, defaultCss, defaultTags, 
   switch (qualifier) {
     case 'additionToPost':
       submitButton.textContent = 'Add';
+      MAX_LENGTH = 20000; // 20kb limit for additions
       break;
     case 'answerToAsk':
       submitButton.textContent = 'Answer';
       break;
     case 'editingPost':
       submitButton.textContent = 'Edit';
+      break;
+    case 'editingAddition':
+      submitButton.textContent = 'Edit';
+      MAX_LENGTH = 20000;
       break;
     case 'asking':
       submitButton.textContent = 'Send';
@@ -172,7 +177,7 @@ const initEditor = ({ blog, userBlogs, defaultContent, defaultCss, defaultTags, 
 
 const [_, qualifier, qualifierId] = /\?(.+)=(.+)$/.exec(location.search) || [];
 
-if (qualifier === 'editingPost') window.parent.postMessage({ editingPostId: qualifierId }, uri);
+if (['editingPost', 'editingAddition'].includes(qualifier)) window.parent.postMessage({ editingPostId: qualifierId }, uri);
 else window.parent.postMessage('frameInit', uri);
 
 const listener = event => {
