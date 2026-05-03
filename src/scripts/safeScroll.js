@@ -7,11 +7,11 @@ const customAttribute = 'data-tf-safeScroll';
 const filteredAttribute = 'data-tf-safeScroll-hidden';
 const postSelector = `:not([${customAttribute}])`;
 const avatarSelector = '.post-author-avatar';
-const mediaSelector = ':is(.post-body,.chain-addition-body) > img';
-const textSelector = ':is(.post-body,.chain-addition-body) > p';
+const contentSelector = ':is(.post-body,.chain-addition-body)';
+const textSelector = ':is(.post-body,.chain-addition-body)';
 const shadowRootSelector = ':is(.post-body,.chain-addition-body):empty'; // Nifty little hack
 
-let blogAvatars, media, text, shadowContent, filterBlogs, blogList, tagList, hideStyle, dispelStyle, filterBlogList, filterTagList;
+let blogAvatars, shadowContent, filterBlogs, blogList, tagList, hideStyle, dispelStyle, filterBlogList, filterTagList;
 
 const isFilteredUser = user => filterBlogList.includes(user);
 const hasFilteredTag = tags => tags.some(tag => filterTagList.includes(tag));
@@ -32,15 +32,12 @@ const filterPosts = posts => posts.forEach(post => {
     || (filterBlogs.trail && (chainAuthors.some(chainAuthor => isFilteredUser(chainAuthor))))
     || (hasFilteredTag(tags))) {
     post.setAttribute(customAttribute, hideStyle);
+    console.log(post);
 
     if (blogAvatars) post.querySelectorAll(avatarSelector).forEach(avatar => avatar.setAttribute(filteredAttribute, ''));
 
     if (hideStyle === 'hidePost') post.setAttribute(filteredAttribute, hideStyle);
-    else {
-      if (media) post.querySelectorAll(mediaSelector).forEach(media => media.setAttribute(filteredAttribute, hideStyle));
-      if (text) post.querySelectorAll(textSelector).forEach(text => text.setAttribute(filteredAttribute, hideStyle));
-      if (shadowContent) post.querySelectorAll(shadowRootSelector).forEach(root => root.setAttribute(filteredAttribute, hideStyle));
-    }
+    else post.querySelectorAll(contentSelector).forEach(media => media.setAttribute(filteredAttribute, hideStyle));
 
     if (dispelStyle === 'click') {
       if (hideStyle === 'hidePost') post.addEventListener('click', removeOnClick);
@@ -52,9 +49,6 @@ const filterPosts = posts => posts.forEach(post => {
 const run = options => {
   ({
     blogAvatars,
-    media,
-    text,
-    shadowContent,
     filterBlogs,
     blogList,
     tagList,

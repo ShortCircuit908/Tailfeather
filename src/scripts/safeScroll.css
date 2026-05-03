@@ -11,7 +11,7 @@ p[data-tf-safescroll-hidden] {
   position: relative;
 }
 
-[data-tf-safescroll-hidden="blur"]:is(p, img, :empty):after {
+[data-tf-safescroll-hidden="blur"]:after {
   position: absolute;
   top: 0;
   left: 0;
@@ -31,7 +31,7 @@ p[data-tf-safescroll-hidden] {
   mask-image: none;
 }
 
-[data-tf-safescroll-hidden="blur"]:is(p, img, :empty):hover:after {
+[data-tf-safescroll-hidden="blur"]:hover:after {
   opacity: 0;
 }
 
@@ -40,7 +40,7 @@ p[data-tf-safescroll-hidden] {
   mask-image: linear-gradient(rgb(0, 0, 0) 60%, transparent 100%);
 }
 
-[data-tf-safescroll-hidden="cover"]:is(p, img, :empty):after {
+[data-tf-safescroll-hidden="cover"]:after {
   position: absolute;
   top: 0;
   left: 0;
@@ -67,7 +67,7 @@ p[data-tf-safescroll-hidden] {
   mask-image: none;
 }
 
-[data-tf-safescroll-hidden="cover"]:is(p, img, :empty):hover:after {
+[data-tf-safescroll-hidden="cover"]:hover:after {
   opacity: 0;
 }
 
@@ -76,17 +76,17 @@ p[data-tf-safescroll-hidden] {
   mask-image: linear-gradient(rgb(0, 0, 0) 60%, transparent 100%);
 }
 
-[data-tf-safescroll-hidden="collapse"]:is(p, img, :empty) {
+[data-tf-safescroll-hidden="collapse"] {
   position: relative;
   transition: height .3s;
 }
 
-[data-tf-safescroll-hidden="collapse"]:is(p, img, :empty):not(:hover) {
+[data-tf-safescroll-hidden="collapse"]:not(:hover) {
   height: 1.5rem;
   overflow: hidden;
 }
 
-[data-tf-safescroll-hidden="collapse"]:is(p, img, :empty):after {
+[data-tf-safescroll-hidden="collapse"]:after {
   position: absolute;
   top: 0;
   left: 0;
@@ -113,7 +113,7 @@ p[data-tf-safescroll-hidden] {
   mask-image: none;
 }
 
-[data-tf-safescroll-hidden="collapse"]:is(p, img, :empty):hover:after {
+[data-tf-safescroll-hidden="collapse"]:hover:after {
   opacity: 0;
 }
 

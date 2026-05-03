@@ -14,22 +14,6 @@
         "type": "toggle",
         "value": "disable"
       },
-      "media": {
-        "value": true,
-        "name": "Blur or hide media in filtered posts",
-        "type": "toggle"
-      },
-      "text": {
-        "value": false,
-        "name": "Blur or hide text in filtered posts",
-        "type": "toggle"
-      },
-      "shadowContent": {
-        "value": true,
-        "name": "Blur or hide sandboxed HTML posts",
-        "tooltip": "Individual content elements within HTML posts cannot be filtered separately, due to how the HTML sandboxing functions.",
-        "type": "toggle"
-      },
       "filterBlogs": {
         "name": "User list filter style",
         "type": "multiSelect",
