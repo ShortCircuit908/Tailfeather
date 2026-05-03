@@ -98,7 +98,7 @@ async function _fetchBlob(username) {
 
     return { envelope };
   } catch (e) {
-    console.error('[BlobManager] Fetch error:', e);
+    console.error('[TF-BlobManager] Fetch error:', e);
     return { error: e.message };
   }
 }
