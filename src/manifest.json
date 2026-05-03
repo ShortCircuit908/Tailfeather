@@ -50,7 +50,7 @@
         "lib/luxon.min.js"
       ],
       "css": [
-        "scripts/utils/elements.css"
+        "scripts/customIcons.css"
       ]
     }
   ],
