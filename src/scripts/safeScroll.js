@@ -32,7 +32,6 @@ const filterPosts = posts => posts.forEach(post => {
     || (filterBlogs.trail && (chainAuthors.some(chainAuthor => isFilteredUser(chainAuthor))))
     || (hasFilteredTag(tags))) {
     post.setAttribute(customAttribute, hideStyle);
-    console.log(post);
 
     if (blogAvatars) post.querySelectorAll(avatarSelector).forEach(avatar => avatar.setAttribute(filteredAttribute, ''));
 
