@@ -1,3 +1,24 @@
+v1.4.1
+
+General
+
+- Now picks up additions from SSE
+
+Custom Editor
+
+- Now supports editing posts!
+  - Currently, only root posts and the most recent additions to a chain can be edited, and edits will likely not propagate to downstream additions
+  - This is likely to be remedied in the future as Noterook continues with the fragment system migration
+
+Custom Icons
+
+- Fixed module CSS not being injected into book shadow roots
+
+New feature! Single-Row Header
+
+- Restores the legacy single-row header design
+  - Optionally re-adds the followers and following links to the navbar
+
 v1.4.0
 
 General

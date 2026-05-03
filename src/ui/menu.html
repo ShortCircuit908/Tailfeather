@@ -147,6 +147,48 @@
             Report an issue
           </a>
           <div class="ui-aboutLink ui-changelog">
+            <h1 style="text-align: center">v1.4.1</h1>
+            <h2 style="text-align: center">General</h2>
+            <ul>
+              <li>Now picks up additions from SSE</li>
+            </ul>
+            <h2 style="text-align: center">Custom Editor</h2>
+            <ul>
+              <li>
+                Now supports editing posts!
+                <ul>
+                  <li>
+                    Currently, only root posts and the most recent additions to
+                    a chain can be edited, and edits will likely not propagate
+                    to downstream additions
+                  </li>
+                  <li>
+                    This is likely to be remedied in the future as Noterook
+                    continues with the fragment system migration
+                  </li>
+                </ul>
+              </li>
+            </ul>
+            <h2 style="text-align: center">Custom Icons</h2>
+            <ul>
+              <li>
+                Fixed module CSS not being injected into book shadow roots
+              </li>
+            </ul>
+            <h2 style="text-align: center">
+              <span class="ui-new">New feature!</span> Single-Row Header
+            </h2>
+            <ul>
+              <li>
+                Restores the legacy single-row header design
+                <ul>
+                  <li>
+                    Optionally re-adds the followers and following links to the
+                    navbar
+                  </li>
+                </ul>
+              </li>
+            </ul>
             <h1 style="text-align: center">v1.4.0</h1>
             <h2 style="text-align: center">General</h2>
             <ul>
@@ -158,79 +200,6 @@
             <h2 style="text-align: center">Display Post Source Code</h2>
             <ul>
               <li>Fixed posts not showing source displays</li>
-            </ul>
-            <h1 style="text-align: center">v1.3.2</h1>
-            <h2 style="text-align: center">General</h2>
-            <ul>
-              <li>Quick fixes for some breaking changes</li>
-              <li>
-                Data wrangling is currently broken but we have an appointment in
-                half an hour so we&#39;re not about to dig into that in earnest
-                right at the moment
-              </li>
-            </ul>
-            <h1 style="text-align: center">v1.3.1</h1>
-            <h2 style="text-align: center">General</h2>
-            <ul>
-              <li>Fixed styling related to the new header layout</li>
-              <li>
-                Fixed the mutation manager not removing listeners from its
-                underlying managers
-              </li>
-            </ul>
-            <h2 style="text-align: center">Custom Timestamps</h2>
-            <ul>
-              <li>Added the option to display timestamps in .beat time</li>
-            </ul>
-            <h1 style="text-align: center">v1.3.0</h1>
-            <h2 style="text-align: center">General</h2>
-            <ul>
-              <li>Improved post pickup methods</li>
-              <li>All features should now work with sideblogs</li>
-              <li>Removed some outdated features</li>
-              <li>
-                Fixed some custom elements using <code>--bg-surface</code> as a
-                background colour instead of a background
-              </li>
-            </ul>
-            <h2 style="text-align: center">
-              <span class="ui-new">New feature!</span> Masonry Tweaks
-            </h2>
-            <ul>
-              <li>
-                Allows up to 8 masonry columns instead of just the usual 2
-              </li>
-            </ul>
-            <h2 style="text-align: center">
-              <span class="ui-new">New feature!</span> Custom Timestamps
-            </h2>
-            <ul>
-              <li>Custom formatted timestamps for posts</li>
-            </ul>
-            <h2 style="text-align: center">
-              <span class="ui-new">New feature!</span> Compact Navigation
-            </h2>
-            <ul>
-              <li>
-                Overhauls the navigation UI to better suit smaller screens
-              </li>
-            </ul>
-            <h2 style="text-align: center">Post Finder</h2>
-            <ul>
-              <li>
-                Fixed searches aborting when searching through a database larger
-                than 10 000 indices
-              </li>
-            </ul>
-            <h2 style="text-align: center">Custom Editor</h2>
-            <ul>
-              <li>Now supports posting from any sideblog, active or not</li>
-              <li>Added support for sending asks</li>
-            </ul>
-            <h2 style="text-align: center">Custom Themes</h2>
-            <ul>
-              <li>Fixed blog switcher contrast on Fruit theme</li>
-              <li>Added two new preset themes: Impedance and Reef</li>
             </ul>
           </div>
           <!-- <div class="ui-aboutLink">
