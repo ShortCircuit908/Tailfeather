@@ -36,9 +36,9 @@ export const handleNavIcons = () => {
   navIconReplace(container, '[href="/everyone/"]', 'globe');
   navIconReplace(container, '[href="/search/"]', 'search');
   navIconReplace(container, '[href^="/book/"]', 'book');
-  // navIconReplace(container, '[href="/following/"]', 'users');
-  // navIconReplace(container, '[href="/followers/"]', 'usergroup');
-  // navIconReplace(container, '[href="/accounts/profile/edit/"]', 'wrench');
+  navIconReplace(container, '[href="/following/"]', 'users');
+  navIconReplace(container, '[href="/followers/"]', 'usergroup');
+  navIconReplace(container, '[href="/accounts/profile/edit/"]', 'wrench');
   navIconReplace(container, '#nav-new-post', 'brush');
   // navIconReplace(container, '.nav-logout', 'logout');
 };

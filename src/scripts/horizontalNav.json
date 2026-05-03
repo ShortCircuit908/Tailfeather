@@ -1,0 +1,18 @@
+{
+  "name": "horizontalNav",
+  "title": "Single-Row Header",
+  "description": "Restores the legacy single-row header design",
+  "preferences": {
+    "enabled": false,
+    "options": {
+      "extraIcons": {
+        "name": "Show extra links",
+        "tooltip": "Adds navigation links for the followers, following, and settings pages",
+        "type": "toggle",
+        "value": true
+      }
+    }
+  },
+  "js": true,
+  "css": true
+}

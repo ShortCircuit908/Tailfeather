@@ -31,17 +31,17 @@
     background: var(--bg);
   }
 
-  :is(:is(.nav-row-left, .nav-row-right) > a, .notif-bell):hover,
+  :is(:is(.nav-row-left, .nav-row-right, .nav-links) > a, .notif-bell):hover,
   :is(.logo, .book-header, .feed-header, .everyone-header),
   body {
     color: var(--white-on-dark);
   }
 
-  :is(.nav-row-left .connection-status, .everyone-subtitle, .feed-last-activity, :is(.nav-row-left, .nav-row-right) > a, .notif-bell) {
+  :is(.nav-row-left .connection-status, .everyone-subtitle, .feed-last-activity, :is(.nav-row-left, .nav-row-right, .nav-links) > a, .notif-bell) {
     color: color-mix(in srgb, var(--white-on-dark), transparent 35%);
   }
 
-  .nav-row .blog-switcher-toggle:hover {
+  :is(.nav-row, .nav-links) .blog-switcher-toggle:hover {
     color: var(--white-on-dark);
   }
 
@@ -175,20 +175,20 @@
     border: 1px solid color-mix(in srgb, var(--white-on-dark), transparent 35%);
   }
 
-  .nav-row .blog-switcher-toggle {
+  :is(.nav-row, .nav-links) .blog-switcher-toggle {
     border: 1px solid color-mix(in srgb, var(--white-on-dark), transparent 35%);
     color: color-mix(in srgb, var(--white-on-dark), transparent 35%);
   }
 
-  .nav-row .blog-switcher-toggle:hover {
+  :is(.nav-row, .nav-links) .blog-switcher-toggle:hover {
     color: var(--white-on-dark);
   }
 
-  .nav-row .connection-status {
+  :is(.nav-row, .nav-links) .connection-status {
     color: color-mix(in srgb, var(--white-on-dark), transparent 35%);
   }
 
-  :is(:is(.nav-row-left, .nav-row-right) > a, .notif-bell, .tf-compactNav-icon):hover {
+  :is(:is(.nav-row-left, .nav-row-right, .nav-links) > a, .notif-bell, .tf-compactNav-icon):hover {
     color: var(--accent);
   }
 }
