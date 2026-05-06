@@ -177,7 +177,7 @@ export async function createPost(body, tagsInput, blog, options = {}) {
     chain_tip_id: null,
     is_pinned: 0,
     pinned_at: null,
-    hide_from_search: options.hideFromSearch ? 1 : 0,
+    hide_from_search: options.hideFromSearch ? 1 : 0
   };
 
   // Ask-answer attestation. Present only when this post was created
@@ -198,7 +198,7 @@ export async function createPost(body, tagsInput, blog, options = {}) {
     tipStore: chain_tip
   });
 
-  // Register tags with server (non-blocking) - skip if hidden from search
+  // Register tags with server (non-blocking) - skip if hidden from search or editing an existing index
   if (!(options.hideFromSearch || options.editing)) {
     registerTags(postId, tags);
   }
