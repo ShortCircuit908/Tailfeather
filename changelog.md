@@ -1,3 +1,10 @@
+# v1.4.2
+
+## Custom Editor
+
+- Fixed edit button duplication
+- Fixed asks being dropped from edited root posts
+
 # v1.4.1
 
 ## General

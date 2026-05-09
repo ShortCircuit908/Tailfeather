@@ -280,7 +280,7 @@ document.addEventListener('nr:new_addition', _cachePostsFromSSE);
  *  created_at: {string}
  *  signature: {string}
  *  hide_from_search: {bool} is book only
- *  answered_ask: {string} ask id i think. to double-check
+ *  answered_ask: {object}
  * }
  */
 
@@ -356,7 +356,7 @@ document.addEventListener('nr:new_addition', _cachePostsFromSSE);
  *  signature: {string}
  *  tags: {string[]}
  * }
- * answered_ask: {string?}
+ * answered_ask: {object}
  * root_author: {string}
  * root_author_avatar: {string}
  * root_author_name: {string}

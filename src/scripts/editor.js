@@ -91,7 +91,13 @@ const listener = event => {
           createdAt: postData.created_at
         });
       } else {
-        editPromise = createPost(composerContent, tagString, blog, { hideFromSearch, editing: true, postId: qualifierId, createdAt: postData.created_at });
+        editPromise = createPost(composerContent, tagString, blog, {
+          hideFromSearch,
+          editing: true,
+          postId: qualifierId,
+          createdAt: postData.created_at,
+          answeredAsk: postData.answered_ask
+        });
       }
 
       editPromise.then(() => {
@@ -238,6 +244,8 @@ const addEditButtons = async articles => {
   const posts = await getPosts(articles);
 
   articles.forEach((article, i) => {
+    if (article.getAttribute(customAttribute)) return;
+    article.setAttribute(customAttribute, '');
     const post = posts[i];
     if (!post) return;
     if (!blogs.some(({ username }) => username === post.author)) return;
