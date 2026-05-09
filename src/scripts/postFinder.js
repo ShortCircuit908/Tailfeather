@@ -211,7 +211,7 @@ const quickInfo = ({ post_id, author, author_name, author_avatar, body, tags, cr
     post_id,
     author,
     author_name,
-    author_avatar,
+    author_avatar: resolveAvatar(author_avatar),
     body: contentStr,
     tags: tagStr,
     created_at
@@ -236,10 +236,14 @@ const indexFragments = async (force = false) => {
     const storeEntries = rootEntries.union(additionEntries);
 
     storeEntries.forEach(post => {
-      if (post.postId && !searchableIndices.has(post.post_id) || force) { // some really busted artifacts don't have post ids apparently (add-19d02d1f8fd-a13905a9)
+      if (post.post_id && (!searchableIndices.has(post.post_id) || force)) { // some really busted artifacts don't have post ids apparently (add-19d02d1f8fd-a13905a9)
         const searchable = { post_id: post.post_id, quick_info: quickInfo(post), stored_at: Date.now() };
         searchableIndices.add(post.post_id);
-        searchStore.put(searchable);
+        try {
+          searchStore.put(searchable);
+        } catch (e) {
+          console.error('[PostFinder] Data provided to an operation does not meet requirements:', post, searchable);
+        }
 
         ++i;
       }
@@ -289,9 +293,9 @@ const newResultCounter = () => {
 
 const renderResult = post => {
   try {
-    const { is_stapled, stapled_by, additions, post_id } = post;
-    const servingUser = is_stapled ? stapled_by : post.author;
-    const [opaqueSlice] = additions.length ? additions.slice(-1) : [post];
+    const { is_stapled, stapled_by_blog, additions, post_id } = post;
+    const servingUser = is_stapled ? stapled_by_blog : post.author;
+    const [opaqueSlice] = additions.length ? additions.slice(-1) : [Object.assign({ ...post }, { author: post.root_author, author_name: post.root_author_name, author_avatar: post.root_author_avatar })];
     const { author, author_name, body, tags, created_at, author_avatar } = opaqueSlice;
     const d = new Date(created_at);
 

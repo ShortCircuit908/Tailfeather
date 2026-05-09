@@ -36,7 +36,6 @@ export const openDatabase = async () => new Promise((resolve, reject) => {
     const db = event.target.result;
     const tx = event.target.transaction;
 
-    conditionalCreateStore(db, 'postStore', { keyPath: 'post_id' }); // slated for removal after migration
     conditionalCreateStore(db, 'rootStore', { keyPath: 'post_id' });
     conditionalCreateStore(db, 'additionStore', { keyPath: 'addition_id' });
     conditionalCreateStore(db, 'tipStore', { keyPath: 'post_id' });
@@ -45,91 +44,7 @@ export const openDatabase = async () => new Promise((resolve, reject) => {
     conditionalCreateStore(db, 'searchStore', { keyPath: 'post_id' });
 
     tx.oncomplete = async () => { // upgrade transaction must finish before we can open a transaction to access objectStores and open indices
-      // fragment system migration
-      if (event.oldVersion <= 4) {
-        console.info('[FDB] Migrating cache to fragment system');
-        const utx = db.transaction(['postStore', 'rootStore', 'additionStore', 'tipStore', 'searchStore'], 'readwrite');
-
-        utx.objectStore('searchStore').clear();
-        const postStore = tx.objectStore('postStore');
-        const postEntries = new Set(await promisifyIDBRequest(postStore.getAll()));
-        const rootFragments = new Map(), additionFragments = new Map(), chainTips = new Map();
-        const stored_at = Date.now();
-
-        postEntries.forEach(post => {
-          rootFragments.set(post.root_post_id || post.post_id, {
-            kind: "root",
-            post_id: post.root_post_id || post.post_id,
-            author: post.author || post.author_username,
-            author_name: post.author_name || post.author || post.author_username,
-            author_avatar: post.author_avatar,
-            body: post.body,
-            tags: post.is_stapled ? post.tags : post.original_tags,
-            media_urls: post.media_urls || [],
-            created_at: post.created_at,
-            signature: post.root_signature,
-            hide_from_search: post.hide_from_search || 0,
-            answered_ask: post.answered_ask || null,
-            stored_at
-          });
-          post.additions?.forEach(addition => {
-            additionFragments.set(addition.addition_id, {
-              kind: "addition",
-              addition_id: addition.addition_id,
-              post_id: addition.post_id,
-              author: addition.author || addition.author_username,
-              author_name: addition.author_name || addition.author || addition.author_username,
-              author_avatar: addition.author_avatar,
-              body: addition.body,
-              tags: addition.tags,
-              media_urls: addition.media_urls,
-              created_at: addition.created_at,
-              signature: addition.signature,
-              stored_at
-            });
-          });
-          chainTips.set(post.post_id, {
-            kind: "chain_tip",
-            post_id: post.post_id,
-            chain: post.additions?.map(({ addition_id }) => addition_id) || [],
-            root_post_id: post.root_post_id || post.post_id,
-            stapler_tags: post.is_stapled ? post.tags : null,
-            stapled_at: post.is_stapled ? post.updated_at : null,
-            stapled_by_blog: post.stapled_by,
-            _blob_owner: post.stapled_by || post.author,
-            is_pinned: post.is_pinned,
-            pinned_at: post.pinned_at || null,
-            updated_at: post.updated_at || post.created_at,
-            chain_version: post.chain_version,
-            chain_tip_id: post.chain_tip_id,
-            original_tags: post.original_tags,
-            root_signature: post.root_signature,
-            stored_at
-          });
-        });
-
-        postStore.clear();
-
-        const rootStore = utx.objectStore('rootStore');
-        const additionStore = utx.objectStore('additionStore');
-        const tipStore = utx.objectStore('tipStore');
-
-        rootFragments.forEach(root => rootStore.put(root));
-        additionFragments.forEach(addition => additionStore.put(addition));
-        chainTips.forEach(tip => tipStore.put(tip));
-
-        conditionalDeleteStore(db, 'postStore');
-
-        utx.commit();
-      }
-
-      const indextx = db.transaction(['postStore', 'rootStore', 'additionStore', 'tipStore', 'userStore', 'userBookStore', 'searchStore']);
-
-      if (event.newVersion < 5) {
-        const postStore = indextx.objectStore('postStore');
-        conditionalCreateIndex(postStore, 'created_at', 'created_at');
-        conditionalCreateIndex(postStore, 'stored_at', 'stored_at');
-      }
+      const indextx = db.transaction(['rootStore', 'additionStore', 'tipStore', 'userStore', 'userBookStore', 'searchStore']);
 
       const rootStore = indextx.objectStore('rootStore');
       conditionalCreateIndex(rootStore, 'created_at', 'created_at');
@@ -242,6 +157,10 @@ export const updateData = (dataObj, options = null) => {
     const store = tx.objectStore(dataStore);
     [dataObj[dataStore]].flat().map(async data => {
       if (typeof data === 'undefined') return;
+      if ('kind' in data && data.kind === 'addition' && !data.post_id) {
+        console.warn('[FDB] Broken addition fragment stored');
+        console.trace();
+      }
 
       let updateData;
       const existingData = await smartGetData(store, data);
