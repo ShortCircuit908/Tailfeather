@@ -1,4 +1,8 @@
-#tumblr:has(.postFinder-dialog[open]) {
+html {
+  scrollbar-gutter: stable;
+}
+
+html:has(.postFinder-dialog[open]) {
   overflow: hidden;
 }
 
@@ -263,6 +267,7 @@ body[data-tf-custom-icons] .nav-links .postFinder-icon {
   border-left: 2px solid var(--border);
   padding-left: 0.5rem;
   font-style: italic;
+  min-height: 0;
 }
 
 .postFinder-tags {
