@@ -184,7 +184,7 @@ const keywordSearch = async (keywords, start = 0) => {
 const categorySearch = async ({ users, texts, tags, date }) => keywordSearch([users, texts, tags, date].flat());
 const strictCategorySearch = async ({ users, texts, tags, date }) => categorySearch({ users, texts, tags, date }).then(hits => {
   [users, texts, tags] = [users, texts, tags].map(v => v.filter(k => k[0] !== '-').map(k => k.toLowerCase()));
-  const threshold = [users, texts, tags, date].filter(v => v.length).length;
+  const threshold = [users, texts, tags, date, types].filter(v => v.length).length;
   const matches = [];
 
   hits.forEach(postInfo => {
@@ -268,6 +268,7 @@ const indexFromUpdate = async ({ detail: { targets } }) => { // take advantage o
   if (['rootStore', 'additionStore'].some(store => store in targets)) {
     updateData({
       searchStore: [targets.rootStore || [], targets.additionStore || []].flat().map(fragment => {
+        if (!fragment?.post_id) return;
         if (postIndices.has(fragment.post_id)) postIndices.add(fragment.post_id);
         if (!searchableIndices.has(fragment.post_id)) {
           if (searchableIndices.has(fragment.post_id)) searchableIndices.add(fragment.post_id);
@@ -280,14 +281,14 @@ const indexFromUpdate = async ({ detail: { targets } }) => { // take advantage o
 
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'June', 'Jule', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
 
-const newResultCounter = () => {
+const newResultCounter = rendered => {
   const r = {
     tag: 'b',
-    children: cursorStatus.hits
+    children: rendered
   }
   let l;
   if (cursorStatus.index < cursorStatus.remaining) l = ['Showing the first ', r, ' results'];
-  else l = [r, ` result${cursorStatus.hits > 1 ? 's' : ''} found`];
+  else l = [r, ` result${rendered > 1 ? 's' : ''} found`];
   return noact({ className: 'postFinder-resultCounter', children: l });
 };
 
@@ -357,7 +358,7 @@ const renderResult = post => {
   }
 };
 
-const renderResults = async (hits, replace = true) => {
+const renderResults = async (hits, replace = true, options) => {
   console.debug(`[PostFinder] Recieved ${hits.length} hits`);
 
   if (!hits.length) {
@@ -365,9 +366,17 @@ const renderResults = async (hits, replace = true) => {
     return;
   }
 
-  const posts = await getIndexedPosts(hits.map(({ post_id }) => post_id));
-  const results = Object.values(posts).filter(definedFn).map(renderResult);
-  let resultLabel = newResultCounter();
+  let posts = Object.values(await getIndexedPosts(hits.map(({ post_id }) => post_id))).filter(definedFn);
+  if (typeof options !== 'undefined') {
+    const { showRoots, showAdditions, showTransparent } = options;
+    posts = posts.filter(post => {
+      const isRoot = post.post_id === post.root_post_id;
+      const isAddition = post.additions?.some(({ post_id }) => post_id === post.post_id);
+      return showRoots && isRoot || showAdditions && isAddition || showTransparent && !isRoot && !isAddition;
+    });
+  }
+  const results = posts.map(renderResult);
+  let resultLabel = newResultCounter(results.length);
 
   if (replace) resultSection.replaceChildren(resultLabel, ...results);
   else resultSection.append(...results)
@@ -387,11 +396,19 @@ const newPaginationMenu = page => noact({
   children: `Load next ${maxResults} results`
 });
 
-const paginationManager = async (hits, page = 1) => {
-  await renderResults(hits, page === 1);
+const paginationManager = async (hits, page = 1, advanced) => {
+  let options;
+  if (advanced) {
+    options = {
+      showRoots: document.getElementById('postFinder-advanced-roots').checked,
+      showAdditions: document.getElementById('postFinder-advanced-additions').checked,
+      showTransparent: document.getElementById('postFinder-advanced-transparent').checked
+    };
+  }
+  await renderResults(hits, page === 1, options);
 
   if (cursorStatus.index < cursorStatus.remaining) {
-    resultSection.append(newPaginationMenu(page));
+    resultSection.append(newPaginationMenu(page, options));
   }
 };
 
@@ -429,8 +446,8 @@ async function onAdvancedSearch() {
   this.setAttribute('disabled', '');
   let px;
 
-  if (strict) px = strictCategorySearch({ users, texts, tags, date }).then(paginationManager);
-  else px = categorySearch({ users, texts, tags, date }).then(paginationManager);
+  if (strict) px = strictCategorySearch({ users, texts, tags, date }).then(hits => paginationManager(hits, 1, 1));
+  else px = categorySearch({ users, texts, tags, date }).then(hits => paginationManager(hits, 1, 1));
 
   await px;
   this.removeAttribute('disabled');
@@ -606,6 +623,50 @@ const searchWindow = noact({
                 type: 'date',
                 id: 'postFinder-advanced-date',
                 className: 'postFinder-search',
+              }
+            ]
+          },
+          {
+            children: [
+              {
+                tag: 'label',
+                for: 'postFinder-advanced-roots',
+                children: 'Show root posts'
+              },
+              {
+                tag: 'input',
+                type: 'checkbox',
+                id: 'postFinder-advanced-roots',
+                checked: true,
+              }
+            ]
+          },
+          {
+            children: [
+              {
+                tag: 'label',
+                for: 'postFinder-advanced-additions',
+                children: 'Show additions'
+              },
+              {
+                tag: 'input',
+                type: 'checkbox',
+                id: 'postFinder-advanced-additions',
+                checked: true,
+              }
+            ]
+          },
+          {
+            children: [
+              {
+                tag: 'label',
+                for: 'postFinder-advanced-transparent',
+                children: 'Show transparent staples'
+              },
+              {
+                tag: 'input',
+                type: 'checkbox',
+                id: 'postFinder-advanced-transparent'
               }
             ]
           },

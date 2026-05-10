@@ -1,6 +1,6 @@
 /* PostDaemon: All-in-one post wrangling, caching, and reassembly module */
 
-import { getData, updateData } from './database.js';
+import { clearData, getData, updateData } from './database.js';
 import { fetchBlobCached } from './blobManager.js';
 import { defined, unique, uniqueDefined, uniqueFn } from './jsTools.js';
 import { extractUserFromHref, cacheAvatar } from './users.js';
@@ -92,12 +92,40 @@ async function _fetchUserBlobs(usernames) {
     chain_tips?.forEach(tip => chainTips.set(tip.post_id, tip));
   });
 
+  const errs = [];
+
   updateData({
-    rootStore: [...rootFragments.values()],
-    additionStore: [...additionFragments.values()],
-    tipStore: [...chainTips.values()],
-    userStore: _usersFromFragments(rootFragments, chainTips)
+    rootStore: [...rootFragments.values()].filter(root => {
+      if (root.post_id && root.created_at && root.author && root.tags) return true;
+      else {
+        errs.push(root);
+        return false
+      }
+    }),
+    additionStore: [...additionFragments.values()].filter(addition => {
+      if (addition.addition_id && addition.post_id && addition.created_at && addition.author && addition.tags) return true;
+      else {
+        errs.push(addition);
+        return false
+      }
+    }),
+    tipStore: [...chainTips.values()].filter(tip => {
+      if (tip.post_id && tip._blob_owner && tip.root_post_id) return true;
+      else {
+        errs.push(tip);
+        return false
+      }
+    }),
+    userStore: _usersFromFragments(rootFragments, chainTips).filter(user => {
+      if (user.username && user.display_name) return true;
+      else {
+        errs.push(user);
+        return false;
+      }
+    })
   });
+
+  console.warn(`[PostDaemon] Accumulated malformed data:`, errs);
 
   return {
     rootFragments: [...rootFragments.values()],
@@ -343,41 +371,41 @@ document.addEventListener('nr:new_addition', _cachePostsFromSSE);
  * all info for a given display object in one place; root, additions, and all .
  * 
  * {
- * author: {string} display object author
- * additions: {object[]} {
- *  addition_id: {string} prefixed with `add-`
- *  author: {string}
- *  author_avatar: {string ("")} seemingly always an empty string
- *  author_name: {string}
- *  body: {string}
- *  created_at: {string}
- *  media_urls: {string[]}
- *  post_id {string} conventional id
- *  signature: {string}
- *  tags: {string[]}
- * }
- * answered_ask: {object}
- * root_author: {string}
- * root_author_avatar: {string}
- * root_author_name: {string}
- * body: {string}
- * chain_tip_id: {string?} addition (pfx: add-) id of most recent addition if applicable, null otherwise
- * chain_version: {number} no. of additions
- * created_at: {string} timestamp of root post
- * hide_from_search: {bool}
- * is_pinned: {bool}
- * is_stapled: {bool}
- * media_urls: {string[]} unused? points to the root or last addition
- * original_tags: {string[]}
- * pinned_at: {string?}
- * post_id: {string} id of display object
- * root_post_id: {string}
- * root_signature: {string}
- * signature: {string} signature of root or most recent addition
- * stapled_at: {string?} timestamp of staple if applicable
- * stapled_by_blog: {string?} stapler if present
- * tags: {string[]}
- * updated_at: {string} timestamp of root or most recent addition
+  * author: {string} display object author
+  * additions: {object[]} {
+  *  addition_id: {string} prefixed with `add-`
+  *  author: {string}
+  *  author_avatar: {string ("")} seemingly always an empty string
+  *  author_name: {string}
+  *  body: {string}
+  *  created_at: {string}
+  *  media_urls: {string[]}
+  *  post_id {string} conventional id
+  *  signature: {string}
+  *  tags: {string[]}
+  * }
+  * answered_ask: {object}
+  * root_author: {string}
+  * root_author_avatar: {string}
+  * root_author_name: {string}
+  * body: {string}
+  * chain_tip_id: {string?} addition (pfx: add-) id of most recent addition if applicable, null otherwise
+  * chain_version: {number} no. of additions
+  * created_at: {string} timestamp of root post
+  * hide_from_search: {bool}
+  * is_pinned: {bool}
+  * is_stapled: {bool}
+  * media_urls: {string[]} unused? points to the root or last addition
+  * original_tags: {string[]}
+  * pinned_at: {string?}
+  * post_id: {string} id of display object
+  * root_post_id: {string}
+  * root_signature: {string}
+  * signature: {string} signature of root or most recent addition
+  * stapled_at: {string?} timestamp of staple if applicable
+  * stapled_by_blog: {string?} stapler if present
+  * tags: {string[]}
+  * updated_at: {string} timestamp of root or most recent addition
  * }
  */
 
@@ -391,6 +419,8 @@ document.addEventListener('nr:new_addition', _cachePostsFromSSE);
 function _createDisplayObject(rootFragment, additionFragments, chainTip) {
   additionFragments = additionFragments.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
   const opaqueParent = additionFragments.slice(-1)[0];
+
+  if (additionFragments.some(({ post_id }) => typeof post_id === 'undefined')) console.warn('[PostDaemon] Malformed addition fragment', rootFragment, additionFragments, chainTip);
 
   return {
     author: chainTip._blob_owner,
@@ -452,18 +482,27 @@ function _mapChainTipsToDisplayObjectEntries(rootFragments, additionFragments, c
   return posts.entries();
 }
 
+function _isMisformed(fragment) {
+  return (typeof fragment?.post_id === 'undefined') || (fragment?.kind === 'chain_tip' && fragment?.chain.length && fragment?.post_id === fragment?.root_post_id);
+}
+
 /**
  * Retrieves and reassembles IDB-cached posts
  * @param {string[]} postIds - Posts to be retrieved
  * @returns {object?[]} posts - Key-value pairs for associated entries, null if not cached
  */
 export async function getIndexedPosts(postIds) {
-  const rootIds = [], additionIds = [], postMap = new Map();
+  const rootIds = [], additionIds = [], postMap = new Map(), misformed = { tipStore: [], additionStore: [] };
   postIds.forEach(id => postMap.set(id, null));
 
   let { tipStore: chainTips } = await getData({ tipStore: postIds });
 
-  chainTips = uniqueDefined(chainTips);
+  chainTips = uniqueDefined(chainTips).filter(tip => {
+    if (_isMisformed(tip)) {
+      misformed.tipStore.push(tip.post_id);
+      return false;
+    } else return true;
+  })
 
   chainTips.forEach(({ root_post_id, chain }) => {
     rootIds.push(root_post_id);
@@ -472,7 +511,11 @@ export async function getIndexedPosts(postIds) {
 
   const { rootStore: rootFragments, additionStore: additionFragments } = await getData({ rootStore: unique(rootIds), additionStore: unique(additionIds) });
 
-  _mapChainTipsToDisplayObjectEntries(rootFragments, additionFragments, chainTips).forEach(([post_id, post]) => postMap.set(post_id, post));
+  _mapChainTipsToDisplayObjectEntries(rootFragments, additionFragments.map(addition => {
+    if (_isMisformed(addition)) misformed.additionStore.push(addition.addition_id);
+    return addition
+  }), chainTips).forEach(([post_id, post]) => postMap.set(post_id, post));
+  clearData(misformed);
   return Object.fromEntries(postMap.entries());
 }
 

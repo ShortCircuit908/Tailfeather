@@ -1,4 +1,4 @@
-const DB_VERSION = 5; // database version
+const DB_VERSION = 6; // database version
 const EXPIRY_TIME = 86400000; // period after which data is considered expired
 export const txOptions = { durability: 'relaxed' }; // more performant
 
@@ -10,6 +10,13 @@ const conditionalCreateStore = (db, storeName, options) => {
 const conditionalDeleteStore = (db, storeName) => {
   if (db.objectStoreNames.contains(storeName)) db.deleteObjectStore(storeName);
 };
+const conditionalGetIndex = (store, indexName) => {
+  let index = null;
+  try {
+    index = store.index(indexName);
+  } catch { }
+  return index
+}
 const conditionalCreateIndex = (store, indexName, keyPath, options = { unique: false }) => {
   if (!store.indexNames.contains(indexName)) {
     store.createIndex(indexName, keyPath, options);
@@ -43,39 +50,40 @@ export const openDatabase = async () => new Promise((resolve, reject) => {
     conditionalCreateStore(db, 'userBookStore', { keyPath: 'username' });
     conditionalCreateStore(db, 'searchStore', { keyPath: 'post_id' });
 
-    tx.oncomplete = async () => { // upgrade transaction must finish before we can open a transaction to access objectStores and open indices
-      const indextx = db.transaction(['rootStore', 'additionStore', 'tipStore', 'userStore', 'userBookStore', 'searchStore']);
+    const rootStore = tx.objectStore('rootStore');
+    conditionalCreateIndex(rootStore, 'created_at', 'created_at');
+    conditionalCreateIndex(rootStore, 'author', 'author');
+    conditionalCreateIndex(rootStore, 'tags', 'tags', { multientry: true });
 
-      const rootStore = indextx.objectStore('rootStore');
-      conditionalCreateIndex(rootStore, 'created_at', 'created_at');
-      conditionalCreateIndex(rootStore, 'author', 'author');
-      conditionalCreateIndex(rootStore, 'tags', 'tags', { multientry: true });
+    const additionStore = tx.objectStore('additionStore');
+    conditionalDeleteIndex(additionStore, 'by_post_id', conditionalGetIndex(additionStore, 'by_post_id')?.unique);
+    // post_id is *not* unique for all specimens 
+    // see: https://noterook.net/book/ceilingmeat/?post=19d1127de81-dfa8ef7cad0ae685
+    conditionalCreateIndex(additionStore, 'by_post_id', 'post_id');
+    conditionalCreateIndex(additionStore, 'created_at', 'created_at');
+    conditionalCreateIndex(additionStore, 'author', 'author');
+    conditionalCreateIndex(additionStore, 'tags', 'tags', { multientry: true });
 
-      const additionStore = indextx.objectStore('additionStore');
-      conditionalCreateIndex(additionStore, 'by_post_id', 'post_id', { unique: true });
-      conditionalCreateIndex(additionStore, 'created_at', 'created_at');
-      conditionalCreateIndex(additionStore, 'author', 'author');
-      conditionalCreateIndex(additionStore, 'tags', 'tags', { multientry: true });
+    const tipStore = tx.objectStore('tipStore');
+    conditionalCreateIndex(tipStore, 'updated_at', 'updated_at');
+    conditionalCreateIndex(tipStore, '_blob_owner', '_blob_owner');
+    conditionalCreateIndex(tipStore, 'root_post_id', 'root_post_id'); // not unique because multiple tips can share a root
 
-      const tipStore = indextx.objectStore('tipStore');
-      conditionalCreateIndex(tipStore, 'stapled_at', 'stapled_at');
-      conditionalCreateIndex(tipStore, '_blob_owner', '_blob_owner');
-      conditionalCreateIndex(tipStore, 'root_post_id', 'root_post_id'); // not unique because multiple tips can share a root
+    const userStore = tx.objectStore('userStore');
+    conditionalCreateIndex(userStore, 'display_name', 'display_name');
+    conditionalCreateIndex(userStore, 'stored_at', 'stored_at');
 
-      const userStore = indextx.objectStore('userStore');
-      conditionalCreateIndex(userStore, 'display_name', 'display_name');
-      conditionalCreateIndex(userStore, 'stored_at', 'stored_at');
+    const userBookStore = tx.objectStore('userBookStore');
+    conditionalCreateIndex(userBookStore, 'display_name', 'display_name');
+    conditionalCreateIndex(userBookStore, 'stored_at', 'stored_at');
 
-      const userBookStore = indextx.objectStore('userBookStore');
-      conditionalCreateIndex(userBookStore, 'display_name', 'display_name');
-      conditionalCreateIndex(userBookStore, 'stored_at', 'stored_at');
+    const searchStore = tx.objectStore('searchStore');
+    conditionalCreateIndex(searchStore, 'quick_info', 'quick_info');
+    conditionalDeleteIndex(searchStore, 'storedAt');
+    conditionalCreateIndex(searchStore, 'stored_at', 'stored_at');
 
-      const searchStore = indextx.objectStore('searchStore');
-      conditionalCreateIndex(searchStore, 'quick_info', 'quick_info');
-      conditionalCreateIndex(searchStore, 'storedAt', 'storedAt');
-
-      console.info(`[FDB] Updated database from v${event.oldVersion} to v${event.newVersion}`);
-    };
+    console.info(`[FDB] Updated database from v${event.oldVersion} to v${event.newVersion}`);
+    tx.commit();
   };
 
   request.onsuccess = () => resolve(request.result);
@@ -107,16 +115,20 @@ const dispatchUpdate = (type, targets) => {
   window.dispatchEvent(event);
 };
 
+const txErrorCache = new WeakMap();
+
 const postTransactionHandler = (tx, i) => new Promise((resolve, reject) => {
   tx.oncomplete = resolve;
   tx.onerror = e => {
-    try {
-      console.error(`[FDB] Database cache transaction error originating from module ${import.meta.url}: `, e, 'Relevant info: ', i);
-    } catch { // in the case we ever copy this module verbatim to a non-module environment and get annoyed when error logging breaks
+    if (!txErrorCache.has(i)) {
+      txErrorCache.set(i, e);
       console.error('[FDB] Database cache transaction error: ', e, 'Relevant info: ', i);
     }
-    reject(e);
   };
+  tx.onabort = e => {
+    console.error('[FDB] Database cache transaction aborted: ', e, 'Relevant info: ', i);
+    reject(e);
+  }
 });
 
 /** caches data into stores, overwriting any existing data tied to those keys (if not an autoincremented store)
@@ -156,12 +168,6 @@ export const updateData = (dataObj, options = null) => {
     options && (storeOptions = options[dataStore]);
     const store = tx.objectStore(dataStore);
     [dataObj[dataStore]].flat().map(async data => {
-      if (typeof data === 'undefined') return;
-      if ('kind' in data && data.kind === 'addition' && !data.post_id) {
-        console.warn('[FDB] Broken addition fragment stored');
-        console.trace();
-      }
-
       let updateData;
       const existingData = await smartGetData(store, data);
       if (storeOptions?.updateStrict && typeof existingData === 'undefined') return;
@@ -173,15 +179,19 @@ export const updateData = (dataObj, options = null) => {
       }
       else updateData = data;
       updateData.stored_at = Date.now();
+
       try {
-        store.put(updateData);
+        store.put(updateData).onerror = function (e) {
+          e.preventDefault();
+          if (e.target.error.message !== "A request was aborted, for example through a call to IDBTransaction.abort.") console.error('[FDB] put() generated an asyncronous error:', e, updateData, store);
+        };
       } catch (e) {
         console.error(`[FDB] Failed to update data in store '${dataStore}':`, data, e);
       }
     });
   });
 
-  dispatchUpdate('update', dataObj);
+  // dispatchUpdate('update', dataObj);
   return postTransactionHandler(tx, dataObj);
 };
 
