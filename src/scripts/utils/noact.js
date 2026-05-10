@@ -72,7 +72,7 @@ export const noact = (obj = {}, allowArrowFn = false) => {
           } else if (typeof prop === 'function' && isArrow(prop) && !allowArrowFn) {
             console.error(`[Noact] Illegal arrow function on property ${key}`, el, prop);
             return;
-          } else if (key === 'for') el.setAttribute(key, prop);
+          } else if (['for', 'type', 'list'].includes(key)) el.setAttribute(key, prop);
           else el[key] = prop;
         });
     }
