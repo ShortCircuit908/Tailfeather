@@ -295,10 +295,10 @@ const newResultCounter = rendered => {
 const renderResult = post => {
   try {
     const { is_stapled, stapled_by_blog, additions, post_id } = post;
-    const servingUser = is_stapled ? stapled_by_blog : post.author;
+    const servingUser = is_stapled ? (stapled_by_blog || post.author) : post.author;
     const [opaqueSlice] = additions.length ? additions.slice(-1) : [Object.assign({ ...post }, { author: post.root_author, author_name: post.root_author_name, author_avatar: post.root_author_avatar })];
-    const { author, author_name, body, tags, created_at, author_avatar } = opaqueSlice;
-    const d = new Date(created_at);
+    const { author, author_name, body, tags, author_avatar } = opaqueSlice;
+    const d = new Date(post.updated_at || post.created_at);
 
     return noact({
       className: 'postFinder-result',
