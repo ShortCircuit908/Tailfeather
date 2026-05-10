@@ -5,6 +5,7 @@
       const { debounce, importFeatures, featureify, deepEquals } = await import('../scripts/utils/jsTools.js');
       const { noact } = await import('../scripts/utils/noact.js');
       const { camelCase } = await import('../scripts/utils/case.js');
+      const Themes = await import('../scripts/themes.js');
       const { parse, formatRgb } = culori;
 
       let picker;
@@ -13,7 +14,7 @@
         if (key === 'Enter') this.click();
       }
 
-      const onToggleFeature = async function () {
+      async function onToggleFeature() {
         const name = this.getAttribute('name');
         const checked = this.checked ? true : false;
         let { preferences } = await browser.storage.local.get('preferences');
@@ -28,7 +29,7 @@
           if (!state && checked || state && !checked) this.closest('.ui-primaryContent').querySelector('.ui-featureTitle').click();
         }
       };
-      const onTextInput = async function ({ target }) {
+      async function onTextInput({ target }) {
         const value = target.value;
         const [name, key] = target.name.split('-');
         let { preferences } = await browser.storage.local.get('preferences');
@@ -37,71 +38,40 @@
         browser.storage.local.set({ preferences });
       };
 
-      /* const updateTheme = colors => {
-        colors ??= {
-          "black": "0 0 0",
-          "white": "255 255 255",
-          "whiteOnDark": "255 255 255",
-          "navy": "0 25 53",
-          "red": "255 73 48",
-          "orange": "255 138 0",
-          "yellow": "232 215 56",
-          "green": "0 207 53",
-          "blue": "0 184 255",
-          "purple": "124 92 255",
-          "pink": "255 98 206",
-          "accent": "0 184 255 / 1",
-          "deprecatedAccent": "0 184 255",
-          "follow": "243 248 251"
-        };
-        document.getElementById('ui-theme').innerText = `
-          :root {
-            --white: ${colors.white};
-            --white-on-dark: ${colors.whiteOnDark};
-            --primary: ${colors.navy};
-            --accent: ${colors.accent};
-            --secondary-accent: ${colors.deprecatedAccent || colors.secondaryAccent};
-            --purple: ${colors.purple};
-            --black: ${colors.black};
-          }`;
-      }; */
-
-      const title = featureTitle => {
-        return {
-          className: 'ui-featureTitle',
-          onclick: function () {
-            this.closest('li').dataset.new = false;
-            const secondaryContent = this.closest('li').querySelector('.ui-secondaryContent');
-            const caret = this.querySelector('svg');
-            if (secondaryContent.getAttribute('active') === 'true') {
-              secondaryContent.setAttribute('active', 'false');
-              caret.style.transform = 'rotate(180deg)';
-            } else {
-              secondaryContent.setAttribute('active', 'true');
-              caret.style.transform = 'rotate(360deg)';
-            }
+      const newTitle = featureTitle => ({
+        className: 'ui-featureTitle',
+        onclick: function () {
+          this.closest('li').dataset.new = false;
+          const secondaryContent = this.closest('li').querySelector('.ui-secondaryContent');
+          const caret = this.querySelector('svg');
+          if (secondaryContent.getAttribute('active') === 'true') {
+            secondaryContent.setAttribute('active', 'false');
+            caret.style.transform = 'rotate(180deg)';
+          } else {
+            secondaryContent.setAttribute('active', 'true');
+            caret.style.transform = 'rotate(360deg)';
+          }
+        },
+        children: [
+          {
+            tag: 'h2',
+            children: [featureTitle]
           },
-          children: [
-            {
-              tag: 'h2',
-              children: [featureTitle]
-            },
-            {
-              className: 'ui-caretWrapper',
+          {
+            className: 'ui-caretWrapper',
+            children: [{
+              tag: 'svg',
+              width: 24,
+              height: 24,
+              style: 'transform: rotate(180deg);',
               children: [{
-                tag: 'svg',
-                width: 24,
-                height: 24,
-                style: 'transform: rotate(180deg);',
-                children: [{
-                  tag: 'use',
-                  href: '#icons-caret'
-                }]
+                tag: 'use',
+                href: '#icons-caret'
               }]
-            }
-          ]
-        }
-      };
+            }]
+          }
+        ]
+      });
 
       const luminance = rgb => {
         const channels = [rgb.r, rgb.g, rgb.b];
@@ -135,7 +105,7 @@
               {
                 className: 'ui-primaryContent',
                 children: [
-                  title(feature.title),
+                  newTitle(feature.title),
                   {
                     className: 'ui-toggleWrapper',
                     children: [
@@ -192,274 +162,354 @@
           }
 
           if ('options' in preference) {
-            const optionsWrapper = $('<div class="ui-options"><h2>Options</h2></div>');
+            const optionsWrapper = noact({
+              className: 'ui-options',
+              children: {
+                tag: 'h2',
+                children: 'Options'
+              }
+            });
 
-            Object.keys(feature.preferences.options).forEach(key => {
-              const option = feature.preferences.options[key];
-              if (typeof option.name === 'undefined') option.name = option.title; // weh
-              let wrapper, tooltip, credit;
-              option.tooltip && (tooltip = $(`<div class="ui-tooltipAnchor"><div class="ui-tooltip">${option.tooltip}</div></div>`));
-              option.credit && ('');
+            Object.entries(feature.preferences.options).forEach(([key, option]) => {
+              option.name ??= option.title;
+
+              const tooltip = option.tooltip ? noact({
+                className: 'ui-tooltipAnchor',
+                children: {
+                  className: 'ui-tooltip',
+                  children: option.tooltip
+                }
+              }) : null;
+              let wrapper;
 
               switch (option.type) {
                 case 'toggle': {
-                  wrapper = $(`<div class="ui-inputWrapper ui-checkboxWrapper"></div>`);
-                  const input = $('<input>', { class: 'ui-checkbox', type: 'checkbox', id: `ui-feature-${name}-${key}`, name: `${name}-${key}` });
-                  const label = $(`<label for="ui-feature-${name}-${key}" name="${name}-${key}">${option.name}</label>`);
+                  wrapper = noact({
+                    className: 'ui-inputWrapper ui-checkboxWrapper',
+                    children: [
+                      {
+                        tag: 'input',
+                        id: `ui-feature-${name}-${key}`,
+                        className: 'ui-checkbox',
+                        name: `${name}-${key}`,
+                        checked: preference.options[key],
+                        ariaChecked: preference.options[key],
+                        onkeydown: kbToggleAction,
+                        onchange: async function () {
+                          const checked = this.checked ? true : false;
+                          this.setAttribute('aria-checked', checked);
+                          let { preferences } = await browser.storage.local.get('preferences');
 
-                  wrapper.append(label);
-                  wrapper.append(input);
+                          if (checked) preferences[name].options[key] = true;
+                          else preferences[name].options[key] = false;
 
-                  if (preference.options[key]) {
-                    input.attr('checked', '');
-                    input.attr('aria-checked', 'true');
-                  }
-
-                  input.on('keydown', kbToggleAction);
-                  input.on('change', async function () {
-                    const checked = this.checked ? true : false;
-                    this.setAttribute('aria-checked', checked);
-                    let { preferences } = await browser.storage.local.get('preferences');
-
-                    if (checked) preferences[name].options[key] = true;
-                    else preferences[name].options[key] = false;
-
-                    browser.storage.local.set({ preferences });
+                          browser.storage.local.set({ preferences });
+                        },
+                        type: 'checkbox'
+                      },
+                      {
+                        tag: 'label',
+                        for: `ui-feature-${name}-${key}`,
+                        name: `${name}-${key}`,
+                        children: option.name
+                      }
+                    ]
                   });
                   break;
                 } case 'select': {
-                  wrapper = $(`<div class="ui-inputWrapper "><label for="ui-feature-${name}-${key}">${option.name}</label></div>`);
-                  const selectInput = $(`<select class="ui-select" id="ui-feature-${name}-${key}" name="${name}-${key}"></select>`);
+                  wrapper = noact({
+                    className: 'ui-inputWrapper',
+                    children: [
+                      {
+                        tag: 'label',
+                        for: `ui-feature-${name}-${key}`,
+                        name: `${name}-${key}`,
+                        children: option.name
+                      },
+                      {
+                        tag: 'select',
+                        id: `ui-feature-${name}-${key}`,
+                        name: `${name}-${key}`,
+                        onchange: async function () {
+                          const { value } = this;
+                          let { preferences } = await browser.storage.local.get('preferences');
 
-                  Object.keys(option.options).forEach(subKey => {
-                    const subOption = option.options[subKey];
-                    const value = $(`<option value="${subOption.value}">${subOption.name}</option>`);
+                          [...this.children].forEach(o => {
+                            o.setAttribute('aria-selected', o.value === value);
+                          });
 
-                    selectInput.append(value);
+                          preferences[name].options[key] = value;
 
-                    if (preference.options[key] === subOption.value) {
-                      value.attr('selected', '');
-                      value.attr('aria-selected', true);
-                    }
-                  });
-
-                  wrapper.append(selectInput);
-
-                  selectInput.on('change', async function () {
-                    const { value } = this;
-                    let { preferences } = await browser.storage.local.get('preferences');
-
-                    [...this.children].forEach(o => {
-                      o.setAttribute('aria-selected', o.value === value);
-                    });
-
-                    preferences[name].options[key] = value;
-
-                    browser.storage.local.set({ preferences });
+                          browser.storage.local.set({ preferences });
+                        },
+                        children: Object.values(option.options).map(subOption => ({
+                          tag: 'option',
+                          value: subOption.value,
+                          selected: preference.options[key] === subOption.value,
+                          ariaSelected: preference.options[key] === subOption.value,
+                          children: subOption.name
+                        }))
+                      }
+                    ]
                   });
                   break;
                 } case 'multiSelect': {
-                  wrapper = $(`<div class="ui-inputWrapper "><label for="ui-feature-${name}-${key}">${option.name}</label></div>`);
-                  const multiSelectWrapper = $(`<div class="ui-multiSelectWrapper"></div>`);
+                  wrapper = noact({
+                    tag: 'ui-inputWrapper',
+                    children: [
+                      {
+                        tag: 'label',
+                        for: `ui-feature-${name}-${key}`,
+                        name: `${name}-${key}`,
+                        children: option.name
+                      },
+                      {
+                        className: 'ui-multiSelectWrapper',
+                        children: Object.entries(option.options).map(([subKey, subOption]) => ({
+                          className: 'ui-checkboxWrapper',
+                          children: [
+                            {
+                              tag: 'label',
+                              for: `ui-feature-${name}-${key}-${subKey}`,
+                              name: `${name}-${key}-${subKey}`,
+                              ariaRole: 'switch',
+                              children: subOption.name
+                            },
+                            {
+                              tag: 'input',
+                              id: `ui-feature-${name}-${key}-${subKey}`,
+                              className: 'ui-checkbox',
+                              name: `${name}-${key}-${subKey}`,
+                              ariaHidden: true,
+                              checked: preference.options[key][subKey],
+                              ariaChecked: preference.options[key][subKey],
+                              onchange: async function () {
+                                const checked = !!this.checked;
+                                let { preferences } = await browser.storage.local.get('preferences');
 
-                  Object.keys(option.options).forEach(subKey => {
-                    const subOption = option.options[subKey];
-                    const multiSelectItem = $(`<div class="ui-checkboxWrapper"></div>`);
-                    const input = $('<input>', { class: 'ui-checkbox', type: 'checkbox', id: `ui-feature-${name}-${key}-${subKey}`, name: `${name}-${key}`, ariaHidden: 'true' });
-                    const label = $(`<label for="ui-feature-${name}-${key}-${subKey}" name="${name}-${key}" aria-role="switch">${subOption.name}</label>`);
+                                this.setAttribute('aria-checked', checked);
+                                if (checked) preferences[name].options[key][subKey] = true;
+                                else preferences[name].options[key][subKey] = false;
 
-                    multiSelectItem.append(label);
-                    multiSelectItem.append(input);
-                    multiSelectWrapper.append(multiSelectItem);
-
-                    if (preference.options[key][subKey]) {
-                      input.attr('checked', '');
-                      input.attr('aria-checked', 'true');
-                    }
-
-                    input.on('change', async function () {
-                      const checked = !!this.checked;
-                      let { preferences } = await browser.storage.local.get('preferences');
-
-                      this.setAttribute('aria-checked', checked);
-                      if (checked) preferences[name].options[key][subKey] = true;
-                      else preferences[name].options[key][subKey] = false;
-
-                      browser.storage.local.set({ preferences });
-                    });
+                                browser.storage.local.set({ preferences });
+                              }
+                            }
+                          ]
+                        }))
+                      }
+                    ]
                   });
-
-                  wrapper.append(multiSelectWrapper);
                   break;
                 } case 'listSelect': {
-                  wrapper = $(`<div class="ui-inputWrapper"><label for="ui-feature-${name}-${key}">${option.name}</label></div>`);
-                  const listSelectWrapper = $(`<div class="ui-listSelectWrapper"></div>`);
+                  wrapper = noact({
+                    className: 'ui-inputWrapper',
+                    children: [
+                      {
+                        tag: 'label',
+                        for: `ui-feature-${name}-${key}`,
+                        name: `${name}-${key}`,
+                        children: option.name
+                      },
+                      {
+                        className: 'ui-listSelectWrapper',
+                        children: option.options.map(listItem => {
+                          const listItemName = camelCase(listItem);
 
-                  option.options.forEach(listItem => {
-                    const listItemName = camelCase(listItem);
-                    const input = $('<input>', { class: 'ui-listSelect', type: 'checkbox', id: `ui-feature-${name}-${key}-${listItemName}`, name: `${name}-${key}` });
-                    const label = $(`<label for="ui-feature-${name}-${key}-${listItemName}" name="${name}-${key}">${listItem}</label>`);
+                          return [
+                            {
+                              tag: 'input',
+                              id: `ui-feature-${name}-${key}-${listItemName}`,
+                              className: 'ui-listSelect',
+                              name: `${name}-${key}-${listItemName}`,
+                              type: 'checkbox',
+                              ariaHidden: true,
+                              checked: preference.options[key].includes(listItem),
+                              ariaChecked: preference.options[key].includes(listItem),
+                              onchange: async function () {
+                                const checked = !!this.checked;
+                                let { preferences } = await browser.storage.local.get('preferences');
 
-                    listSelectWrapper.append(input);
-                    listSelectWrapper.append(label);
+                                if (checked) preferences[name].options[key].push(listItem);
+                                else preferences[name].options[key] = preferences[name].options[key].filter(item => item !== listItem);
 
-                    if (preference.options[key].includes(listItem)) input.attr('checked', '');
-
-                    input.on('change', async function () {
-                      const checked = !!this.checked;
-                      let { preferences } = await browser.storage.local.get('preferences');
-
-                      if (checked) preferences[name].options[key].push(listItem);
-                      else preferences[name].options[key] = preferences[name].options[key].filter(item => item !== listItem);
-
-                      browser.storage.local.set({ preferences });
-                    });
+                                browser.storage.local.set({ preferences });
+                              }
+                            },
+                            {
+                              tag: 'label',
+                              for: `ui-feature-${name}-${key}-${listItemName}`,
+                              name: `${name}-${key}-${listItemName}`,
+                              children: listItem
+                            }
+                          ]
+                        })
+                      }
+                    ]
                   });
-
-                  wrapper.append(listSelectWrapper);
                   break;
                 } case 'number': {
-                  wrapper = $(`<div class="ui-inputWrapper ui-numInputWrapper"></div>`);
-                  const label = $(`<label for="ui-feature-${name}-${key}" name="${name}-${key}">${option.name}</label>`);
-                  const numInput = $('<input>', {
-                    id: `ui-feature-${name}-${key}`,
-                    type: 'number',
-                    class: 'ui-numInput',
-                    placeholder: option.value,
-                    min: option.min,
-                    'aria-valuemin': option.min,
-                    max: option.max,
-                    'aria-valuemax': option.max,
-                    step: option.step,
-                    style: `width: ${String(option.max).length}em;`,
-                    value: preference.options[key],
-                    'aria-valuenow': preference.options[key],
-                    name: `${name}-${key}`
-                  });
-
-                  wrapper.append(label);
-                  wrapper.append(numInput);
-
-                  numInput.on('change', async function () {
-                    const value = this.value;
-                    this.setAttribute('aria-valuenow', value);
-                    let { preferences } = await browser.storage.local.get('preferences');
-                    preferences[name].options[key] = +value;
-                    browser.storage.local.set({ preferences });
+                  wrapper = noact({
+                    className: 'ui-inputWrapper ui-numInputWrapper',
+                    children: [
+                      {
+                        tag: 'label',
+                        for: `ui-feature-${name}-${key}`,
+                        name: `${name}-${key}`,
+                        children: option.name
+                      },
+                      {
+                        tag: 'input',
+                        type: 'number',
+                        id: `ui-feature-${name}-${key}`,
+                        name: `${name}-${key}`,
+                        className: 'ui-numInput',
+                        placeholder: option.value,
+                        min: option.min,
+                        ariaValuemin: option.min,
+                        max: option.max,
+                        ariaValuemax: option.max,
+                        step: option.step,
+                        style: `width: ${String(option.max).length}em;`,
+                        value: preference.options[key],
+                        ariaValuenow: preference.options[key],
+                        onchange: async function () {
+                          const value = this.value;
+                          this.setAttribute('aria-valuenow', value);
+                          let { preferences } = await browser.storage.local.get('preferences');
+                          preferences[name].options[key] = +value;
+                          browser.storage.local.set({ preferences });
+                        }
+                      }
+                    ]
                   });
                   break;
                 } case 'range': {
-                  wrapper = $(`<div class="ui-inputWrapper ui-rangeInputWrapper"></div>`);
-                  const label = $(`<label for="ui-feature-${name}-${key}" name="${name}-${key}" id="ui-feature-${name}-${key}-label">${option.name} (value: ${preference.options[key]}${option.unit || ''})</label>`);
-                  const rangeInput = $('<input>', {
-                    type: 'range',
-                    ariaRole: 'slider',
-                    class: 'ui-rangeInput',
-                    placeholder: option.value,
-                    min: option.min,
-                    'aria-valuemin': option.min,
-                    max: option.max,
-                    'aria-valuemax': option.max,
-                    step: option.step,
-                    list: 'list' in option ? `${name}-${key}-list` : '',
-                    value: preference.options[key],
-                    'aria-valuenow': preference.options[key],
-                    id: `ui-feature-${name}-${key}`,
-                    name: `${name}-${key}`
-                  });
-
-                  wrapper.append(label);
-                  wrapper.append(rangeInput);
-
-                  if ('list' in option) {
-                    const list = $(`<datalist id="${name}-${key}-list">${option.list.map(({ value, label }) => `<option value="${value}" label="${label}"></option>`).join('')}</datalist>`);
-                    wrapper.append(list);
-                  }
-
-                  rangeInput.on('change', async function () {
-                    const value = this.value;
-                    this.setAttribute('aria-valuenow', value);
-                    let { preferences } = await browser.storage.local.get('preferences');
-                    preferences[name].options[key] = +value;
-                    document.getElementById(`ui-feature-${name}-${key}-label`).innerText = `${option.name} (value: ${value}${option.unit || ''})`;
-                    browser.storage.local.set({ preferences });
+                  wrapper = noact({
+                    className: 'ui-inputWrapper ui-rangeInputWrapper',
+                    children: [
+                      {
+                        tag: 'label',
+                        id: `ui-feature-${name}-${key}-label`,
+                        for: `ui-feature-${name}-${key}`,
+                        name: `${name}-${key}`,
+                        children: `${option.name} (value: ${preference.options[key]}${option.unit || ''})`
+                      },
+                      {
+                        tag: 'input',
+                        type: 'range',
+                        ariaRole: 'slider',
+                        id: `ui-feature-${name}-${key}`,
+                        name: `${name}-${key}`,
+                        className: 'ui-rangeInput',
+                        placeholder: option.value,
+                        min: option.min,
+                        ariaValuemin: option.min,
+                        max: option.max,
+                        ariaValuemax: option.max,
+                        step: option.step,
+                        list: 'list' in option ? `${name}-${key}-list` : '',
+                        value: preference.options[key],
+                        ariaValuenow: preference.options[key],
+                        onchange: async function () {
+                          const value = this.value;
+                          this.setAttribute('aria-valuenow', value);
+                          let { preferences } = await browser.storage.local.get('preferences');
+                          preferences[name].options[key] = +value;
+                          document.getElementById(`ui-feature-${name}-${key}-label`).textContent = `${option.name} (value: ${value}${option.unit || ''})`;
+                          browser.storage.local.set({ preferences });
+                        }
+                      },
+                      'list' in option ? {
+                        tag: 'datalist',
+                        children: option.list.map(({ value, label }) => ({
+                          tag: 'option',
+                          value,
+                          label
+                        }))
+                      } : null
+                    ]
                   });
                   break;
                 } case 'text': {
-                  const type = option.textarea ? '<textarea>' : '<input>'
-                  wrapper = $(`<div class="ui-inputWrapper"></div>`);
-                  const label = $(`<label for="ui-feature-${name}-${key}" name="${name}-${key}">${option.name}</label>`);
-                  const textInput = $(type, {
-                    class: 'ui-textInput',
-                    type: 'text',
-                    autocorrect: 'off',
-                    spellcheck: 'false',
-                    placeholder: option.placeholder,
-                    list: 'list' in option ? `${name}-${key}-list` : '',
-                    id: `ui-feature-${name}-${key}`,
-                    name: `${name}-${key}`,
-                    value: preference.options[key]
+                  wrapper = noact({
+                    className: 'ui-inputWrapper',
+                    children: [
+                      {
+                        tag: 'label',
+                        for: `ui-feature-${name}-${key}`,
+                        name: `${name}-${key}`,
+                        children: option.name
+                      },
+                      {
+                        tag: option.textarea ? 'textarea' : 'input',
+                        id: `ui-feature-${name}-${key}`,
+                        className: 'ui-textInput',
+                        type: 'text',
+                        autocorrect: 'off',
+                        spellcheck: 'false',
+                        placeholder: option.placeholder,
+                        list: 'list' in option ? `${name}-${key}-list` : '',
+                        name: `${name}-${key}`,
+                        value: preference.options[key],
+                        oninput: debounce(onTextInput),
+                        children: option.textarea ? preference.options[key] : null
+                      },
+                      'list' in option ? {
+                        tag: 'datalist',
+                        children: option.list.map(({ value, label }) => ({
+                          tag: 'option',
+                          value,
+                          label
+                        }))
+                      } : null
+                    ]
                   });
-                  if (option.textarea) textInput.text(preference.options[key]);
-                  if ('list' in option) {
-                    const list = $(`<datalist id="${name}-${key}-list">${option.list.map(item => `<option value="${item}"></option>`).join('')}</datalist>`);
-                    wrapper.append(list);
-                  }
-
-                  wrapper.append(label);
-                  wrapper.append(textInput);
-
-                  textInput.on('input', debounce(onTextInput));
                   break;
                 } case 'color': {
-                  wrapper = $('<div>', { class: 'ui-inputWrapper' });
-                  const colorButton = $('<button>', { id: `ui-feature-${name}-${key}`, class: 'ui-colorInput', feature: name, value: key });
-                  const resetButton = $('<button>', { class: 'ui-colorInput ui-reset' });
-
-                  colorButton.text(option.name);
-                  colorButton.css({
-                    backgroundColor: `rgb(${preference.options[key]})`,
-                    color: contrastBW(parse(`rgb(${preference.options[key]})`)),
-                    borderColor: `color-mix(in srgb, rgb(${preference.options[key]}), rgb(var(--black)) 20%)`
+                  wrapper = noact({
+                    tag: 'ui-inputWrapper',
+                    children: [
+                      {
+                        id: `ui-feature-${name}-${key}`,
+                        className: 'ui-colorInput',
+                        style: `background-color:rgb(${preference.options[key]});color:${contrastBW(parse(`rgb(${preference.options[key]})`))};border-color:color-mix(in srgb, rgb(${preference.options[key]}), rgb(var(--border)) 20%)`,
+                        feature: name,
+                        value: key,
+                        onclick: locatePicker,
+                        children: option.name
+                      },
+                      {
+                        className: 'ui-colorInput ui-reset',
+                        style: `background-color:rgb(${option.value});color:${contrastBW(parse(`rgb(${option.value})`))};border-color:color-mix(in srgb, rgb(${option.value}), rgb(var(--border)) 20%)`,
+                        onclick: async function () {
+                          colorButton.css({
+                            backgroundColor: `rgb(${option.value})`,
+                            color: contrastBW(parse(`rgb(${option.value})`)),
+                            borderColor: `color-mix(in srgb, rgb(${option.value}), rgb(var(--black)) 20%)`
+                          });
+                          let { preferences } = await browser.storage.local.get('preferences');
+                          preferences[name].options[key] = option.value;
+                          browser.storage.local.set({ preferences });
+                        },
+                        children: 'Reset',
+                      }
+                    ]
                   });
-                  colorButton.on('click', locatePicker);
-
-                  resetButton.text('reset');
-                  resetButton.css({
-                    backgroundColor: `rgb(${option.value})`,
-                    color: contrastBW(parse(`rgb(${option.value})`)),
-                    borderColor: `color-mix(in srgb, rgb(${option.value}), rgb(var(--black)) 20%)`
-                  });
-                  resetButton.on('click', async () => {
-                    colorButton.css({
-                      backgroundColor: `rgb(${option.value})`,
-                      color: contrastBW(parse(`rgb(${option.value})`)),
-                      borderColor: `color-mix(in srgb, rgb(${option.value}), rgb(var(--black)) 20%)`
-                    });
-                    let { preferences } = await browser.storage.local.get('preferences');
-                    preferences[name].options[key] = option.value;
-                    browser.storage.local.set({ preferences });
-                  });
-
-                  wrapper.append(colorButton);
-                  wrapper.append(resetButton);
-
                   break;
                 } default: {
-                  console.warn(`${name}.${key} [missing support for ${option.type}]`);
+                  console.warn(`[PawJob-Menu] Cannot render option ${name}.${key}: missing support for type '${option.type}'`);
                   break;
                 }
               }
 
               tooltip && (wrapper.append(tooltip));
-              credit && (wrapper.append(credit));
               wrapper && optionsWrapper.append(wrapper);
             });
 
-            featureItem.querySelector('.ui-secondaryContent').append(optionsWrapper[0]); // jquery to html conversion
+            featureItem.querySelector('.ui-secondaryContent').append(optionsWrapper);
           }
         } catch (e) {
-          console.error(`error creating feature item '${name}':`, e);
+          console.error(`[PawJob-Config] Error creating feature item '${name}':`, e);
         }
 
         return featureItem;
@@ -476,8 +526,10 @@
           target.setAttribute('active', 'true');
         }));
       };
+
       const createFeatures = (installedFeatures, preferences) => {
-        $('[data-searchable]').remove();
+        document.querySelectorAll('[data-searchable]').forEach(s => s.remove());
+        const container = document.getElementById('ui-featureContainer');
 
         Object.keys(installedFeatures).forEach(key => {
           const feature = installedFeatures[key];
@@ -485,7 +537,7 @@
 
           if (feature && preference) {
             const featureItem = newFeatureItem(key, feature, preference, preferences);
-            $(`#ui-featureContainer`).append(featureItem);
+            container.append(featureItem);
           }
         });
 
@@ -531,7 +583,7 @@
 
       const clampY = y => y + 456 <= visualViewport.height ? y : visualViewport.height - 456;
       const clampX = x => x + 240 <= visualViewport.width ? x : visualViewport.width - 256;
-      const closePicker = () => {
+      function closePicker() {
         window.setTimeout(() => {
           if (!picker.is(':hover')) {
             picker.css('opacity', 0);
@@ -540,20 +592,15 @@
           }
         }, 300);
       };
-      const locatePicker = async ({ originalEvent }) => {
+      async function locatePicker({ originalEvent }) {
         const { target } = originalEvent;
-        picker[0].dataset.target = target.id;
+        picker.dataset.target = target.id;
         const { preferences } = await browser.storage.local.get('preferences');
         const color = parse(`rgb(${preferences[target.getAttribute('feature')].options[target.value]})`);
-        picker.css({
-          opacity: 1,
-          top: clampY(originalEvent.clientY + 8),
-          left: clampX(originalEvent.clientX + 8)
-        });
-        $('#rgb').val(formatRgb(color));
-        document.getElementById('rgb').dispatchEvent(new Event('input'));
-        picker.show();
-        picker.on('mouseleave', closePicker);
+        picker.style = `display:flex;opacity:1;top:${clampY(originalEvent.clientY + 8)};left:${clampX(originalEvent.clientX + 8)}`;
+        const rgb = document.getElementById('rgb');
+        rgb.value = formatRgb(color);
+        rgb.dispatchEvent(new Event('input'));
       };
 
       const changeWidgetState = widget => {
@@ -570,8 +617,9 @@
           document.body.style.overflow = 'hidden';
         }
 
-        picker = $('#ui-picker');
-        picker.hide();
+        picker = document.getElementById('ui-picker');
+        picker.style.display = 'none';
+        picker.addEventListener('mouseleave', closePicker);
 
         const installedFeatures = await importFeatures(); // "await has no effect on this type of expression"- it does, actually!
         let { preferences, } = await browser.storage.local.get();
@@ -580,6 +628,18 @@
           preferences = featureify(installedFeatures, preferences);
         }
 
+        if (preferences.themes?.enabled) Themes.main();
+        browser.storage.onChanged.addListener(async (changes, areaName) => {
+          const { preferences } = changes;
+          if (areaName !== 'local' || typeof preferences === 'undefined') return;
+
+          const newPref = preferences.newValue.themes;
+          const changed = Object.keys(preferences.newValue).filter(key => !deepEquals(preferences?.newValue[key], preferences?.oldValue[key]));
+
+          if (changed.includes('themes') && newPref.enabled) Themes.update(newPref.options);
+          else if (!newPref.enabled) Themes.clean();
+        });
+
         createFeatures(installedFeatures, preferences);
 
         const parsePreferenceText = text => {
@@ -587,8 +647,8 @@
 
           if (typeof preferences === 'object') {
             browser.storage.local.set({ preferences });
-            console.log('successfully imported preferences!');
-          } else throw 'invalid data type';
+            console.log('[PawJob-Menu] Successfully imported preferences!');
+          } else throw 'Invalid data type';
 
           createFeatures(installedFeatures, preferences);
           document.getElementById('ui-preferenceText').value = JSON.stringify(preferences, null, 2);
@@ -621,11 +681,11 @@
           try {
             parsePreferenceText(input.value);
           } catch (e) {
-            console.error('failed to import preferences from text!', e);
-            this.textContent = 'import failed!';
+            console.error('[PawJob-Menu] Failed to import preferences from text!', e);
+            this.textContent = 'Import failed!';
             this.style.backgroundColor = 'rgb(var(--red))';
             setTimeout(() => {
-              this.textContent = 'import from textarea';
+              this.textContent = 'Import from textarea';
               this.style.backgroundColor = 'rgb(var(--white))';
             }, 2000);
           }
@@ -647,7 +707,7 @@
                 parsePreferenceText(reader.result);
                 button.textContent = 'import successful!';
               } catch (e) {
-                console.error('failed to import preferences from file!', e);
+                console.error('[PawJob-Menu] Failed to import preferences from text!', e);
                 button.textContent = 'import failed!';
                 button.style.backgroundColor = 'rgb(var(--red))';
               } finally {
@@ -687,7 +747,7 @@
         document.getElementById('ui-featureSearch').addEventListener('input', debounce(onSearch));
 
         const version = browser.runtime.getManifest().version;
-        document.getElementById('version').innerText = `version: v${version}`;
+        document.getElementById('version').textContent = `Version: v${version}`;
 
         Object.keys(preferences).forEach(key => { if (preferences[key].new) delete preferences[key].new; });
         browser.storage.local.set({ preferences });

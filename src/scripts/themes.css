@@ -27,6 +27,20 @@
     --accent-dim: rgba(0, 184, 255, 0.15);
   }
 
+  .ui-tab[active="true"] {
+    color: var(--white-on-dark);
+    background: color-mix(in srgb, var(--white-on-dark), transparent 93%);
+  }
+
+  .ui-tab:hover {
+    color: var(--white-on-dark);
+    background: color-mix(in srgb, var(--white-on-dark), transparent 93%);
+  }
+
+  #ui-menu {
+    --border: var(--border-light);
+  }
+
   .site-header {
     background: var(--bg);
   }
@@ -163,8 +177,23 @@
     --accent-dim: rgb(255, 171, 92, 0.15);
   }
 
-  .site-header {
+  .site-header,
+  #ui-tabs {
     background: var(--bg-cherry);
+  }
+
+  .ui-tab {
+    color: var(--white-on-dark);
+  }
+
+  .ui-tab[active="true"] {
+    color: var(--white-on-dark);
+    background: color-mix(in srgb, var(--white-on-dark), transparent 93%);
+  }
+
+  .ui-tab:hover {
+    color: var(--white-on-dark);
+    background: color-mix(in srgb, var(--white-on-dark), transparent 93%);
   }
 
   :is(.logo, :is(.nav-row-left, .nav-row-right) > a, .notif-bell, .tf-compactNav-icon) {
@@ -206,7 +235,10 @@
     --accent-dim: rgba(244, 9, 152, 0.15);
     --border: #7107ad;
     --border-light: #a11efb;
+  }
 
+  &:root body,
+  #ui-menu {
     background-image: url('https://upload.wikimedia.org/wikipedia/commons/thumb/7/74/Smith_chart3.svg/960px-Smith_chart3.svg.png'), linear-gradient(195deg, #7902a9, #b63c04, #B30442, #3d1937);
     background-repeat: no-repeat;
     background-position: 50% 20%;
@@ -250,7 +282,10 @@
     --accent: rgb(23, 227, 169);
     --accent-hover: rgb(12, 184, 135);
     --accent-dim: color-mix(in srgb, rgb(83, 187, 212) 15%, transparent);
+  }
 
+  &:root body,
+  #ui-menu {
     background-image: url('https://upload.wikimedia.org/wikipedia/commons/2/2e/Underwater_world.jpg');
     background-attachment: fixed;
     background-position: center;
