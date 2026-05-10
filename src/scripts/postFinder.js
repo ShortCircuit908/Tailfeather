@@ -24,6 +24,8 @@ const cursorStatus = { // silly little react-esque state var
   _remaining: 0,
   _hits: 0,
   keywords: [],
+  tags: {},
+  lowerBound: '00000000000-0000000000000000',
 
   get index() {
     return this._index;
@@ -138,13 +140,13 @@ const newSearchProgress = () => noact({
   ]
 });
 
-const keywordSearch = async (keywords, start = 0) => {
+const keywordSearch = async (keywords, lowerBound = '00000000000-0000000000000000') => {
   keywords = keywords.filter(definedFn).map(v => v.toLowerCase());
   const tx = db.transaction('searchStore', 'readonly');
   const hits = [];
-  let i = 0, lowerBound = start, dumped = 0;
+  let i = 0, dumped = 0;
 
-  cursorStatus.index = start;
+  const startIndex = cursorStatus.index;
   cursorStatus.hits = 0;
   cursorStatus.keywords = keywords;
 
@@ -155,6 +157,9 @@ const keywordSearch = async (keywords, start = 0) => {
 
   while (dumped < searchableIndices.size) {
     const storeEntries = new Set(await promisifyIDBRequest(tx.objectStore('searchStore').getAll(IDBKeyRange.lowerBound(lowerBound, true), BATCH_SIZE)));
+    // known issue: this procures results in a strange pattern; newest of the first 200 results to oldest, then newest of the next 200 results to oldest of 201-400, and so on
+    // this is currently deemed the best possible outcome, as firefox does not support dumping keys in reverse order
+    // it's only visible when searching through very broad search terms; otherwise, it typically appears as if results display newest-to-oldest 
 
     for (const searchable of storeEntries.values()) {
       if (i >= maxResults) break;
@@ -174,15 +179,16 @@ const keywordSearch = async (keywords, start = 0) => {
 
     dumped += BATCH_SIZE;
   }
+  cursorStatus.lowerBound = lowerBound;
 
   cursorStatus.disableAutoSync();
-  console.debug(`[PostFinder] Searched ${cursorStatus.index - start} indices in ${performance.now() - t0}ms`);
+  console.debug(`[PostFinder] Searched ${cursorStatus.index - startIndex} indices in ${performance.now() - t0}ms`);
 
   return hits.map(unstringifyHits).sort((a, b) => (new Date(b.quick_info.created_at)) - (new Date(a.quick_info.created_at)));
 };
 
-const categorySearch = async ({ users, texts, tags, date }) => keywordSearch([users, texts, tags, date].flat());
-const strictCategorySearch = async ({ users, texts, tags, date }) => categorySearch({ users, texts, tags, date }).then(hits => {
+const categorySearch = async ({ users, texts, tags, date }, lowerBound) => keywordSearch([users, texts, tags, date].flat(), lowerBound);
+const strictCategorySearch = async ({ users, texts, tags, date }, lowerBound) => categorySearch({ users, texts, tags, date }, lowerBound).then(hits => {
   [users, texts, tags] = [users, texts, tags].map(v => v.filter(k => k[0] !== '-').map(k => k.toLowerCase()));
   const threshold = [users, texts, tags, date, types].filter(v => v.length).length;
   const matches = [];
@@ -279,7 +285,7 @@ const indexFromUpdate = async ({ detail: { targets } }) => { // take advantage o
   }
 };
 
-const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'June', 'Jule', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'June', 'July', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
 
 const newResultCounter = rendered => {
   const r = {
@@ -382,18 +388,23 @@ const renderResults = async (hits, replace = true, options) => {
   else resultSection.append(...results)
 };
 
-const paginationFunction = page => async function () {
+const paginationFunction = (page, options, advanced) => async function () {
   this.remove(); // remove pagination button
   document.querySelector('.postFinder-resultCounter')?.remove();
-  keywordSearch(cursorStatus.keywords, cursorStatus.index).then(hits => {
-    paginationManager(hits, page + 1);
-  });
+  if (!advanced) {
+    keywordSearch(cursorStatus.keywords, cursorStatus.lowerBound).then(hits => {
+      paginationManager(hits, page + 1);
+    });
+  } else {
+    if (advanced === 2) await strictCategorySearch(cursorStatus.tags, cursorStatus.lowerBound).then(hits => paginationManager(hits, page + 1, 2));
+    else await categorySearch(cursorStatus.tags, cursorStatus.lowerBound).then(hits => paginationManager(hits, page + 1, 1));
+  }
 };
 
-const newPaginationMenu = page => noact({
+const newPaginationMenu = (page, options, advanced) => noact({
   className: 'postFinder-pagination btn-primary-sm',
-  onclick: paginationFunction(page),
-  children: `Load next ${maxResults} results`
+  onclick: paginationFunction(page, options, advanced),
+  children: 'Load more results'
 });
 
 const paginationManager = async (hits, page = 1, advanced) => {
@@ -408,7 +419,7 @@ const paginationManager = async (hits, page = 1, advanced) => {
   await renderResults(hits, page === 1, options);
 
   if (cursorStatus.index < cursorStatus.remaining) {
-    resultSection.append(newPaginationMenu(page, options));
+    resultSection.append(newPaginationMenu(page, options, advanced));
   }
 };
 
@@ -446,7 +457,8 @@ async function onAdvancedSearch() {
   this.setAttribute('disabled', '');
   let px;
 
-  if (strict) px = strictCategorySearch({ users, texts, tags, date }).then(hits => paginationManager(hits, 1, 1));
+  cursorStatus.tags = { users, texts, tags, date };
+  if (strict) px = strictCategorySearch({ users, texts, tags, date }).then(hits => paginationManager(hits, 1, 2));
   else px = categorySearch({ users, texts, tags, date }).then(hits => paginationManager(hits, 1, 1));
 
   await px;
