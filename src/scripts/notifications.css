@@ -1,0 +1,12 @@
+#tf-notifications-dialogue {
+  z-index: 10002;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: color-mix(in srgb, var(--bg), transparent);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
