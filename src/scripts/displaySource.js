@@ -1,7 +1,7 @@
 import { noact } from './utils/noact.js';
 import { postFunction } from './utils/mutation.js';
 import { getOptions } from './utils/jsTools.js';
-import { getPosts } from './utils/postDaemon.js';
+import { getIndexedPosts, getPosts } from './utils/postDaemon.js';
 import { svgIcon } from './utils/icons.js';
 import { getProcessor } from './utils/markdown.js';
 
@@ -9,6 +9,8 @@ let theme, showBoth;
 
 const customClass = 'tailfeather-displaySource';
 const customAttribute = 'data-tf-display-source';
+
+const missedIndices = new Set();
 
 const sourceButton = () => noact({
   className: `${customClass} post-action-btn`,
@@ -45,37 +47,63 @@ const setupDisplay = (postBody, actionTarget, postMarkdown) => {
   }
 };
 
-const addButtons = async posts => {
-  const postObjects = await getPosts(posts);
-  posts.forEach(async (post, i) => {
-    if (post.getAttribute(customAttribute)) return; // Masonry Tweaks seems to trigger this multiple times per post before the filter kicks in
+function _displayify(article, post) {
+  const { body, additions } = post;
+  const chainAdditions = Array.from(article.querySelectorAll('.chain-addition'));
 
-    post.setAttribute(customAttribute, showBoth ? 'showBoth' : 'switch');
-    if (!postObjects[i]) return; // If blob is outdated
-    const { body, additions } = postObjects[i];
-    const chainAdditions = Array.from(post.querySelectorAll('.chain-addition-body'));
+  if (additions.length) { // all source displays are inserted into headers for posts with additions
+    setupDisplay(article.querySelector('.post-body'), article.querySelector('.post-author .post-timestamp'), body);
+    additions.forEach(({ body: additionBody }, j) => {
+      if (!chainAdditions[j] || chainAdditions[j].matches('.chain-addition--blocked')) return;
+      // apparently some necromanced posts can get stored in such a way where the physical post has no additions but the indexed record *does*
+      // hence it's worth a check
+      const chainAdditionBody = chainAdditions[j].querySelector('.chain-addition-body');
+      if (chainAdditionBody) setupDisplay(chainAdditionBody, chainAdditionBody.parentElement.querySelector('.chain-addition-header .chain-addition-time'), additionBody);
+    });
+  } else { // for standalone posts, the toggle is placed in the footer
+    setupDisplay(article.querySelector('.post-body'), article.querySelector('.post-actions :is(.post-action-report,.post-action-delete,[data-action="sticker"])'), body); // a few fallbacks that handle different routes
+  }
+}
 
-    if (additions.length) { // all source displays are inserted into headers for posts with additions
-      setupDisplay(post.querySelector('.post-body'), post.querySelector('.post-author .post-timestamp'), body);
-      additions.forEach(({ body: additionBody }, j) => {
-        // apparently some necromanced posts can get stored in such a way where the physical post has no additions but the indexed record *does*
-        // hence it's worth a check
-        if (chainAdditions[j]) setupDisplay(chainAdditions[j], chainAdditions[j].parentElement.querySelector('.chain-addition-header .chain-addition-time'), additionBody);
-      });
-    } else { // for standalone posts, the toggle is placed in the footer
-      setupDisplay(post.querySelector('.post-body'), post.querySelector('.post-actions :is(.post-action-report,.post-action-delete,[data-action="sticker"])'), body); // a few fallbacks that handle different routes
+const addButtons = async articles => {
+  const postObjects = await getPosts(articles);
+  articles.forEach((article, i) => {
+    if (article.getAttribute(customAttribute)) return; // Masonry Tweaks seems to trigger this multiple times per post before the filter kicks in
+    article.setAttribute(customAttribute, showBoth ? 'showBoth' : 'switch');
+    const post = postObjects[i];
+    if (!post) {
+      missedIndices.add(article.dataset.postId);
+      console.warn('[DisplaySource] Unable to obtain data for post on initial processing', article);
+      return; // If blob is outdated
     }
+    _displayify(article, post);
   });
 };
+
+function _retryMissed({ detail: { targets } }) {
+  if (missedIndices.size && 'tipStore' in targets && (targets.tipStore?.length || targets.tipStore.post_id)) {
+    const indices = [targets.tipStore].flat().filter(({ post_id }) => missedIndices.has(post_id));
+    console.log(indices);
+    getIndexedPosts(indices).then(postObjects => Object.entries(postObjects).forEach(([post_id, postData]) => {
+      const article = document.querySelector(`[data-post-id="${post_id}"]`);
+      if (article && post) {
+        missedIndices.remove(post_id);
+        _displayify(article, post);
+      }
+    }));
+  }
+}
 
 export const main = async () => {
   ({ theme, showBoth } = await getOptions('displaySource'));
   Prism.plugins.customClass.prefix('prism-');
 
   postFunction.start(addButtons, `:not([${customAttribute}])`);
+  window.addEventListener('tailfeather-database-update', _retryMissed);
 };
 export const clean = async () => {
   postFunction.stop(addButtons);
+  window.removeEventListener('tailfeather-database-update', _retryMissed);
   document.querySelectorAll(`.${customClass}`).forEach(s => s.remove());
   document.querySelectorAll(`[${customAttribute}]`).forEach(s => s.removeAttribute(customAttribute));
 };
