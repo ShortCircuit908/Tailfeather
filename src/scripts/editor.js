@@ -232,7 +232,13 @@ const newEditButton = fragment => noact({
 
     openEditorIFrame(`?editing${'addition_id' in fragment ? 'Addition' : 'Post'}=${fragment.post_id}`);
   },
-  children: svgIcon('commandline', 24, 24)
+  children: [
+    {
+      tag: 'span',
+      children: 'Edit'
+    },
+    svgIcon('commandline', 24, 24)
+  ]
 });
 
 const addEditButtons = async articles => {

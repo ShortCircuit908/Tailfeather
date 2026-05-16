@@ -60,6 +60,18 @@
   margin-right: .5rem;
 }
 
+svg.tailfeather-editor {
+  display: none;
+}
+
+[data-tf-icons] svg.tailfeather-editor {
+  display: block;
+}
+
+.tailfeather-editor.post-action-btn {
+  height: 2rem;
+}
+
 .chain-addition-form-controls,
 .ask-modal-controls,
 .ask-answer-controls {
