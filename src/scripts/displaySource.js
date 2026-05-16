@@ -85,9 +85,9 @@ function _retryMissed({ detail: { targets } }) {
     const indices = [targets.tipStore].flat().map(({ post_id }) => post_id).filter(post_id => missedIndices.has(post_id));
     getIndexedPosts(indices).then(postObjects => Object.entries(postObjects).forEach(([post_id, postData]) => {
       const article = document.querySelector(`[data-post-id="${post_id}"]`);
-      if (article && post) {
+      if (article && postData) {
         missedIndices.remove(post_id);
-        _displayify(article, post);
+        _displayify(article, postData);
       }
     }));
   }

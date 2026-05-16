@@ -28,7 +28,7 @@
           const state = secondaryContent.getAttribute('active') === 'true' ? true : false;
           if (!state && checked || state && !checked) this.closest('.ui-primaryContent').querySelector('.ui-featureTitle').click();
         }
-      };
+      }
       async function onTextInput({ target }) {
         const value = target.value;
         const [name, key] = target.name.split('-');
@@ -36,7 +36,7 @@
         preferences[name].options[key] = value;
 
         browser.storage.local.set({ preferences });
-      };
+      }
 
       const newTitle = featureTitle => ({
         className: 'ui-featureTitle',
@@ -482,11 +482,7 @@
                         className: 'ui-colorInput ui-reset',
                         style: `background-color:rgb(${option.value});color:${contrastBW(parse(`rgb(${option.value})`))};border-color:color-mix(in srgb, rgb(${option.value}), rgb(var(--border)) 20%)`,
                         onclick: async function () {
-                          colorButton.css({
-                            backgroundColor: `rgb(${option.value})`,
-                            color: contrastBW(parse(`rgb(${option.value})`)),
-                            borderColor: `color-mix(in srgb, rgb(${option.value}), rgb(var(--black)) 20%)`
-                          });
+                          document.getElementById(`ui-feature-${name}-${key}`).style = `background-color:rgb(${option.value});color:${contrastBW(parse(`rgb(${option.value})`))};border-color:color-mix(in srgb, rgb(${option.value}), rgb(var(--border)) 20%)`;
                           let { preferences } = await browser.storage.local.get('preferences');
                           preferences[name].options[key] = option.value;
                           browser.storage.local.set({ preferences });
@@ -591,7 +587,7 @@
             window.setTimeout(() => { picker.hide() }, 150);
           }
         }, 300);
-      };
+      }
       async function locatePicker({ originalEvent }) {
         const { target } = originalEvent;
         picker.dataset.target = target.id;
@@ -601,7 +597,7 @@
         const rgb = document.getElementById('rgb');
         rgb.value = formatRgb(color);
         rgb.dispatchEvent(new Event('input'));
-      };
+      }
 
       const changeWidgetState = widget => {
         document.querySelectorAll('.ui-filterWidgets button').forEach(b => b.dataset.state = '');

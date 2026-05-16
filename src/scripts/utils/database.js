@@ -14,7 +14,7 @@ const conditionalGetIndex = (store, indexName) => {
   let index = null;
   try {
     index = store.index(indexName);
-  } catch { }
+  } catch { void 0; }
   return index
 }
 const conditionalCreateIndex = (store, indexName, keyPath, options = { unique: false }) => {

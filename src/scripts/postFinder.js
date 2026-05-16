@@ -190,7 +190,7 @@ const keywordSearch = async (keywords, lowerBound = '00000000000-000000000000000
 const categorySearch = async ({ users, texts, tags, date }, lowerBound) => keywordSearch([users, texts, tags, date].flat(), lowerBound);
 const strictCategorySearch = async ({ users, texts, tags, date }, lowerBound) => categorySearch({ users, texts, tags, date }, lowerBound).then(hits => {
   [users, texts, tags] = [users, texts, tags].map(v => v.filter(k => k[0] !== '-').map(k => k.toLowerCase()));
-  const threshold = [users, texts, tags, date, types].filter(v => v.length).length;
+  const threshold = [users, texts, tags, date].filter(v => v.length).length;
   const matches = [];
 
   hits.forEach(postInfo => {
