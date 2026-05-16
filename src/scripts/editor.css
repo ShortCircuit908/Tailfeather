@@ -57,6 +57,11 @@
   display: inline-flex;
   align-items: center;
   gap: .5rem;
-  justify-self: flex-start;
   margin-right: .5rem;
+}
+
+.chain-addition-form-controls,
+.ask-modal-controls,
+.ask-answer-controls {
+  flex-wrap: wrap;
 }
