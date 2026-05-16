@@ -125,7 +125,7 @@ async function _fetchUserBlobs(usernames) {
     })
   });
 
-  console.warn(`[PostDaemon] Accumulated malformed data:`, errs);
+  if (errs.length) console.warn(`[PostDaemon] Accumulated malformed data:`, errs);
 
   return {
     rootFragments: [...rootFragments.values()],
