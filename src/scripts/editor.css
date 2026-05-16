@@ -68,6 +68,10 @@ svg.tailfeather-editor {
   display: block;
 }
 
+[data-tf-icons].post-action-btn.tailfeather-editor span {
+  display: none;
+}
+
 .tailfeather-editor.post-action-btn {
   height: 2rem;
 }

@@ -237,7 +237,7 @@ const newEditButton = fragment => noact({
       tag: 'span',
       children: 'Edit'
     },
-    svgIcon('commandline', 24, 24)
+    svgIcon('commandline', 24, 24, customClass)
   ]
 });
 
