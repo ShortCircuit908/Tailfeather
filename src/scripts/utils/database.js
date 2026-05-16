@@ -191,7 +191,7 @@ export const updateData = (dataObj, options = null) => {
     });
   });
 
-  // dispatchUpdate('update', dataObj);
+  dispatchUpdate('update', dataObj);
   return postTransactionHandler(tx, dataObj);
 };
 
