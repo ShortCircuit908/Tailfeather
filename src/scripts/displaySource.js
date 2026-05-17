@@ -86,7 +86,7 @@ function _retryMissed({ detail: { targets } }) {
     getIndexedPosts(indices).then(postObjects => Object.entries(postObjects).forEach(([post_id, postData]) => {
       const article = document.querySelector(`[data-post-id="${post_id}"]`);
       if (article && postData) {
-        missedIndices.remove(post_id);
+        missedIndices.delete(post_id);
         _displayify(article, postData);
       }
     }));
