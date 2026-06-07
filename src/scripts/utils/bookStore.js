@@ -360,7 +360,7 @@ function _writeComposites(posts, { skipFragments = false } = {}) {
   let pieces = null;
   if (!skipFragments) {
     try {
-      pieces = fragmentDisplayObjects(posts);
+      pieces = _fragmentDisplayObjects(posts);
     } catch (err) {
       console.warn('[TF-BookStore] decompose for dual-write failed:', err);
     }
@@ -535,7 +535,7 @@ export function cacheSSEPost(post) {
 export function replacePost(newPost, deletePostId) {
   let frags = null;
   try {
-    frags = fragmentDisplayObjects([newPost]);
+    frags = _fragmentDisplayObjects([newPost]);
   } catch (err) {
     console.warn('[TF-BookStore] decompose (replacePost) failed:', err);
   }
