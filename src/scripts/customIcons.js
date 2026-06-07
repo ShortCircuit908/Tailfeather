@@ -4,7 +4,7 @@ import { getOptions } from './utils/jsTools.js';
 
 const customClass = 'tailfeather-icons';
 const customAttribute = 'data-tf-icons';
-const iconSelector = `.post-action-btn:not([${customAttribute}])`;
+const iconSelector = `:is(.post-action-btn,.chain-addition-action,.post-header-hide):not([${customAttribute}])`;
 
 const iconMap = {
   'post-permalink': 'link',
@@ -14,7 +14,10 @@ const iconMap = {
   'clear-stickers': 'scissors',
   'toggle-pin': 'pin',
   'edit-tags': 'tag',
-  'delete': 'trash'
+  delete: 'trash',
+  'hide-post': 'hide',
+  block: 'block',
+  mute: 'mute'
 };
 
 const iconReplace = (el, icon) => {
