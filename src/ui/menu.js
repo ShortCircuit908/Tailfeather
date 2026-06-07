@@ -6,9 +6,6 @@
       const { noact } = await import('../scripts/utils/noact.js');
       const { camelCase } = await import('../scripts/utils/case.js');
       const Themes = await import('../scripts/themes.js');
-      const { parse, formatRgb } = culori;
-
-      let picker;
 
       function kbToggleAction({ key }) {
         if (key === 'Enter') this.click();
@@ -28,7 +25,7 @@
           const state = secondaryContent.getAttribute('active') === 'true' ? true : false;
           if (!state && checked || state && !checked) this.closest('.ui-primaryContent').querySelector('.ui-featureTitle').click();
         }
-      };
+      }
       async function onTextInput({ target }) {
         const value = target.value;
         const [name, key] = target.name.split('-');
@@ -36,7 +33,7 @@
         preferences[name].options[key] = value;
 
         browser.storage.local.set({ preferences });
-      };
+      }
 
       const newTitle = featureTitle => ({
         className: 'ui-featureTitle',
@@ -465,37 +462,6 @@
                     ]
                   });
                   break;
-                } case 'color': {
-                  wrapper = noact({
-                    tag: 'ui-inputWrapper',
-                    children: [
-                      {
-                        id: `ui-feature-${name}-${key}`,
-                        className: 'ui-colorInput',
-                        style: `background-color:rgb(${preference.options[key]});color:${contrastBW(parse(`rgb(${preference.options[key]})`))};border-color:color-mix(in srgb, rgb(${preference.options[key]}), rgb(var(--border)) 20%)`,
-                        feature: name,
-                        value: key,
-                        onclick: locatePicker,
-                        children: option.name
-                      },
-                      {
-                        className: 'ui-colorInput ui-reset',
-                        style: `background-color:rgb(${option.value});color:${contrastBW(parse(`rgb(${option.value})`))};border-color:color-mix(in srgb, rgb(${option.value}), rgb(var(--border)) 20%)`,
-                        onclick: async function () {
-                          colorButton.css({
-                            backgroundColor: `rgb(${option.value})`,
-                            color: contrastBW(parse(`rgb(${option.value})`)),
-                            borderColor: `color-mix(in srgb, rgb(${option.value}), rgb(var(--black)) 20%)`
-                          });
-                          let { preferences } = await browser.storage.local.get('preferences');
-                          preferences[name].options[key] = option.value;
-                          browser.storage.local.set({ preferences });
-                        },
-                        children: 'Reset',
-                      }
-                    ]
-                  });
-                  break;
                 } default: {
                   console.warn(`[PawJob-Menu] Cannot render option ${name}.${key}: missing support for type '${option.type}'`);
                   break;
@@ -583,25 +549,6 @@
 
       const clampY = y => y + 456 <= visualViewport.height ? y : visualViewport.height - 456;
       const clampX = x => x + 240 <= visualViewport.width ? x : visualViewport.width - 256;
-      function closePicker() {
-        window.setTimeout(() => {
-          if (!picker.is(':hover')) {
-            picker.css('opacity', 0);
-            picker[0].dataset.target = '';
-            window.setTimeout(() => { picker.hide() }, 150);
-          }
-        }, 300);
-      };
-      async function locatePicker({ originalEvent }) {
-        const { target } = originalEvent;
-        picker.dataset.target = target.id;
-        const { preferences } = await browser.storage.local.get('preferences');
-        const color = parse(`rgb(${preferences[target.getAttribute('feature')].options[target.value]})`);
-        picker.style = `display:flex;opacity:1;top:${clampY(originalEvent.clientY + 8)};left:${clampX(originalEvent.clientX + 8)}`;
-        const rgb = document.getElementById('rgb');
-        rgb.value = formatRgb(color);
-        rgb.dispatchEvent(new Event('input'));
-      };
 
       const changeWidgetState = widget => {
         document.querySelectorAll('.ui-filterWidgets button').forEach(b => b.dataset.state = '');
@@ -616,10 +563,6 @@
           document.body.style.minHeight = '6000px';
           document.body.style.overflow = 'hidden';
         }
-
-        picker = document.getElementById('ui-picker');
-        picker.style.display = 'none';
-        picker.addEventListener('mouseleave', closePicker);
 
         const installedFeatures = await importFeatures(); // "await has no effect on this type of expression"- it does, actually!
         let { preferences, } = await browser.storage.local.get();

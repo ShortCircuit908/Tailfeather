@@ -12,33 +12,51 @@
     "name": "Cassiopeia Lunarii",
     "url": "https://noterook.net/book/dragongirlsnout/"
   },
-  "permissions": ["storage", "scripting"],
-  "host_permissions": ["*://*.noterook.net/"],
+  "permissions": [
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.noterook.net/"
+  ],
   "incognito": "spanning",
   "web_accessible_resources": [
     {
-      "resources": ["*.js", "*.json", "*.css", "*.svg", "*.html"],
-      "matches": ["*://*.noterook.net/*"]
+      "resources": [
+        "*.js",
+        "*.json",
+        "*.css",
+        "*.svg",
+        "*.html"
+      ],
+      "matches": [
+        "*://*.noterook.net/*"
+      ]
     }
   ],
   "content_scripts": [
     {
-      "matches": ["*://*.noterook.net/*"],
+      "matches": [
+        "*://*.noterook.net/*"
+      ],
       "run_at": "document_start",
       "js": [
         "control/contentScript.js",
-        "lib/culori.min.js",
         "lib/marked.min.js",
         "lib/noble-ed25519.min.js",
         "lib/prism.js",
         "lib/purify.min.js",
         "lib/luxon.min.js"
       ],
-      "css": ["scripts/customIcons.css"]
+      "css": [
+        "scripts/customIcons.css"
+      ]
     }
   ],
   "background": {
-    "scripts": ["control/background.js"]
+    "scripts": [
+      "control/background.js"
+    ]
   },
   "action": {
     "default_icon": {
@@ -57,7 +75,9 @@
       "id": "tf-cblunarii@proton.me",
       "strict_min_version": "140.0",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": [
+          "none"
+        ]
       }
     },
     "gecko_android": {
