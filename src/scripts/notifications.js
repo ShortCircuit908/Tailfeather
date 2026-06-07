@@ -117,7 +117,6 @@ function _onNotification(e) {
   const icon = detail.avatar_url || detail.stapler_avatar || detail.stickered_by_avatar || '';
 
   const notif = _buildNotificationItem(detail, { selfUsername: activeSlug });
-  console.log(notif);
 }
 
 function _run() {

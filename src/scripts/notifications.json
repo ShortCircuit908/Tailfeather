@@ -1,7 +1,7 @@
 {
   "name": "notifications",
   "title": "Push Notifications",
-  "description": "Echoes new notifications to your device's push notifications, when Noterook is open in the background.",
+  "description": "Echoes new notifications to your device's push notifications when Noterook is open in the background.",
   "preferences": {
     "enabled": false
   },
