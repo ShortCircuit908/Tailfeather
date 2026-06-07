@@ -17,8 +17,8 @@
         "type": "toggle",
         "value": true
       },
-      "opacity": {
-        "name": "Make stickers translucent on hover",
+      "opaque": {
+        "name": "Make stickers remain opaque on hover",
         "type": "toggle",
         "value": false
       },

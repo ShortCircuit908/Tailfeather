@@ -15,11 +15,12 @@ const outlineStyles = `.sticker-emoji,
 :is([data-theme="light"], [data-theme="hc-light"], [tf-theme="preset-fruit"]) :is(.sticker-emoji, .sticker-tray-btn) {
   filter: drop-shadow(black 1px 1px 0px) drop-shadow(black -1px -1px 0px) drop-shadow(black -1px 1px 0px) drop-shadow(black 1px -1px 0px) drop-shadow(0 1px 2px rgba(0,0,0,0.3));
 }`;
-const opacityStyles = `.sticker-layer {
-  transition: opacity .15s;
+const opacityStyles = `.post-root-region:hover > .sticker-layer {
+    opacity: 1 !important;
 }
-article:hover .sticker-layer {
-  opacity: .5;
+[data-sticker-key]:hover > .sticker-layer,
+.sticker-layer.stickers-peek {
+  opacity: 1 !important;
 }`;
 const arrangedStyles = `article[data-post-id] .sticker-layer {
   right: .5rem !important;
@@ -42,12 +43,12 @@ const hideStyles = `article[data-post-id] .sticker-layer {
   display: none !important;
 }`;
 
-const run = ({ colourEmoji, outline, opacity, visibility }) => {
+const run = ({ colourEmoji, outline, opaque, visibility }) => {
   style.textContent = '';
 
   if (colourEmoji) style.textContent = style.textContent + colourEmojiStyles;
   if (outline) style.textContent = style.textContent + outlineStyles;
-  if (opacity) style.textContent = style.textContent + opacityStyles;
+  if (opaque) style.textContent = style.textContent + opacityStyles;
   if (visibility === 'neat') style.textContent = style.textContent + arrangedStyles;
   else if (visibility === 'hide') style.textContent = style.textContent + hideStyles;
 };
