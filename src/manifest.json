@@ -42,8 +42,8 @@
       "run_at": "document_start",
       "js": [
         "control/contentScript.js",
-        "lib/culori.min.js",
         "lib/marked.min.js",
+        "lib/culori.min.js",
         "lib/noble-ed25519.min.js",
         "lib/prism.js",
         "lib/purify.min.js",

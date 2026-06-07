@@ -159,7 +159,34 @@ export async function fetchBlobCached(username) {
   // No cache, or delta window exceeded - fetch full blob.
   // fetchBlob reads X-Blob-Version from the response and caches.
   const result = await _fetchBlob(username);
-  if (result.envelope) _lastVerified.set(username, Date.now());
+  if (result.envelope) {
+    _lastVerified.set(username, Date.now());
+    return { ...result, cached: false, method: 'full-blob' };
+  }
+
+  // Full fetch failed. If we still hold a last-known-good envelope
+  // (the caller marked it stale to force a refresh, or the server
+  // returned "Book not available" for a blob that's expired /
+  // sideblog-published), serve the stale copy rather than letting
+  // the author vanish from Everyone / Feed / Search / their Book.
+  // The timeline loader skips any author with no envelope, so
+  // dropping the cache here erased every one of that author's
+  // posts across all surfaces - BubbaRoo's report after clicking an
+  // "added to your post" notification fired exactly this path.
+  // Callers that genuinely need fresh-or-nothing use _fetchBlob().
+  // Deliberately NOT surfacing result.error here: a stale-but-present
+  // envelope is a SUCCESSFUL read for consumers (fetchUserPosts bails
+  // on `error || !envelope`, so an error field would re-trigger the
+  // vanish this fallback exists to prevent). `stale: true` carries the
+  // signal for anyone who cares.
+  if (cached?.envelope) {
+    return {
+      envelope: cached.envelope,
+      cached: true,
+      method: 'stale-fallback',
+      stale: true,
+    };
+  }
   return { ...result, cached: false, method: 'full-blob' };
 }
 

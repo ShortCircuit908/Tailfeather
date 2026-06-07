@@ -346,13 +346,7 @@ export async function editCompositeRoot(post, blog, { body, tagStr, createdAt })
   const { root_fragment, chain_tip } = fragmentDisplayObject(newPost);
 
   // store the edited composite post
-  await BookStore.openDatabase(userInfo.id).then(() => BookStore.storePost(newPost));
-
-  /* // store updated fragments in the book
-  await BookStore.openDatabase(userInfo.id).then(() => {
-    BookStore.storeRootFragment(root_fragment);
-    BookStore.storeChainTip(chain_tip);
-  }); */
+  await BookStore.openDatabase(userInfo.id).then(() => BookStore.replacePost(newPost, postId));
 
   // store updated addition fragment to tailfeather store
   await updateData({
@@ -516,13 +510,7 @@ export async function editAddition(parent, blog, { additionBody, additionTagStr,
   const additionFragment = addition_fragments.find(({ addition_id }) => addition_id === additionId);
 
   // store the edited composite post
-  await BookStore.openDatabase(userInfo.id).then(() => BookStore.storePost(newPost));
-
-  /* // store updated fragments in the book
-  await BookStore.openDatabase(userInfo.id).then(() => {
-    BookStore.storeAdditionFragment(additionFragment);
-    BookStore.storeChainTip(chain_tip);
-  }); */
+  await BookStore.openDatabase(userInfo.id).then(() => BookStore.replacePost(newPost, postId));
 
   // store updated addition fragment to tailfeather store
   await updateData({

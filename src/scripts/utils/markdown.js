@@ -151,7 +151,7 @@ export class MarkdownProcessor {
       return this.renderToShadow(text, hostElement);
     } else {
       const e = this.renderStrict(text); // render inline - cheaper
-      hostElement.innerHTML = e;
+      hostElement['innerHTML'] = e;
       return e;
     }
   }
@@ -508,7 +508,7 @@ export class MarkdownProcessor {
   _processLinksAndImages(html, shadowMode) {
     // Use a temporary DOM to process elements
     const temp = document.createElement('div');
-    temp.innerHTML = html;
+    temp['innerHTML'] = html;
 
     // Process images - validate trust, add privacy attrs. Inline
     // data: URIs (base64 images) are rejected as of the "books got
@@ -851,7 +851,7 @@ export class MarkdownProcessor {
     // Create content container
     const content = document.createElement('div');
     content.className = 'shadow-content';
-    content.innerHTML = html;
+    content['innerHTML'] = html;
     shadow.appendChild(content);
 
     // When images inside the closed shadow finish loading, dispatch a
