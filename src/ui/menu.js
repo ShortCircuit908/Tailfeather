@@ -70,24 +70,6 @@
         ]
       });
 
-      const luminance = rgb => {
-        const channels = [rgb.r, rgb.g, rgb.b];
-        const a = channels.map(c => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
-        return a[0] * 0.2126 + a[1] * 0.7152 + a[2] * 0.0722;
-      };
-      const ratio = (lum1, lum2) => lum1 > lum2 ? ((lum2 + 0.05) / (lum1 + 0.05)) : ((lum1 + 0.05) / (lum2 + 0.05));
-      const black = { mode: 'rgb', r: 0.09803921568627451, g: 0.09803921568627451, b: 0.09803921568627451 };
-      const white = { mode: 'rgb', r: 1, g: 1, b: 1 };
-      const lumBlack = luminance(black);
-      const lumWhite = luminance(white);
-      const contrastBW = rgb => {
-        const lum = luminance(rgb);
-        const ratioBlk = ratio(lum, lumBlack);
-        const ratioWht = ratio(lum, lumWhite);
-        if (ratioBlk < ratioWht) return formatRgb(black);
-        else return formatRgb(white);
-      };
-
       const newFeatureItem = (name, feature = {}, preference = {}) => {
         let featureItem;
 
