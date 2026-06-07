@@ -1,3 +1,26 @@
+v1.5.1
+
+General
+
+- Updated BookStore & BlobManager utilities
+- Decluttered some unused PawJob config input types
+
+New feature! Push Notifications
+
+- Echoes new notifications to your device's push notifications when Noterook is open in the background.
+
+Sticker Tweaks
+
+- Replaced the option to make stickers translucent on hover with the option to keep stickers opaque on hover
+
+Display Source
+
+- Fixed a minor bug affecting skipped posts being given another shot to render their source displays
+
+Custom Icons
+
+- Post header, addition header, and social actions now have their own icons
+
 v1.5.0
 
 General
