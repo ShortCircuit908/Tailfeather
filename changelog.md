@@ -1,3 +1,23 @@
+# v1.5.0
+
+## General
+
+- Full menu feature creation overhall; should be largely invisible to the end user
+- Configuration menu now uses the currently selected custom theme
+- Too many database fixes and improvements to count
+
+## Post Finder
+
+- Fixed `null` serving user
+- Fixed search pagination and bounding
+- Added control over which types of posts are shown in results
+
+## Custom Editor
+
+- Fixed action row overflow for asks, answers, and additions on narrow displays
+- Fixed post edit button not displaying as text in iconless mode
+- Fixed post edit button icon not vertically aligning with the rest of the post actions
+
 # v1.4.2
 
 ## Custom Editor
