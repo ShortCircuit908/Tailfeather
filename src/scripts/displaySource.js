@@ -83,12 +83,11 @@ const addButtons = async articles => {
 function _retryMissed({ detail: { targets } }) {
   if (missedIndices.size && 'tipStore' in targets && (targets.tipStore?.length || targets.tipStore.post_id)) {
     const indices = [targets.tipStore].flat().filter(({ post_id }) => missedIndices.has(post_id));
-    console.log(indices);
     getIndexedPosts(indices).then(postObjects => Object.entries(postObjects).forEach(([post_id, postData]) => {
       const article = document.querySelector(`[data-post-id="${post_id}"]`);
-      if (article && post) {
+      if (article && postData) {
         missedIndices.remove(post_id);
-        _displayify(article, post);
+        _displayify(article, postData);
       }
     }));
   }
