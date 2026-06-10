@@ -11,6 +11,10 @@
   color: var(--text-dim);
 }
 
+.chain-addition-action[data-action="sticker"]:has(.tailfeather-icons) {
+  margin-left: 1rem;
+}
+
 :is(.post-header-hide, .post-action-social) .tailfeather-icons {
   stroke-width: 2px;
   width: 1rem;
