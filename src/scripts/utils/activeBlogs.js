@@ -1,5 +1,6 @@
 import { inject } from './inject.js';
 
+// this injection method is a bit janky, but it also solves the more proper wrappedJSObject method from needing to wait in a weird way
 export const [{ user: userInfo }] = await inject('../scripts/inject/app.js');
 
 const LOCAL_KEY_PREFIX = 'nr_active_blog:';
