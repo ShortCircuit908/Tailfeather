@@ -24,15 +24,14 @@ module.exports = {
   },
   "globals": {
     "cloneInto": "readonly",
+    "XPCNativeWrapper": "readonly",
     "marked": "readonly",
     "DOMPurify": "readonly",
     "Prism": "readonly",
     "ace": "readonly",
     "culori": "readonly",
-    "poline": "readonly",
     "nobleEd25519": "readonly",
     "luxon": "readonly",
-    "$": "readonly"
   },
   "rules": {
     "no-case-declarations": "off",
