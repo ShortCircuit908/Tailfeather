@@ -123,7 +123,7 @@ export async function openDatabase(userId) {
     // the upgrade is blocked.  Log a warning and wait - the other
     // connection's onversionchange handler should close it shortly.
     request.onblocked = () => {
-      console.warn('[BookStore] DB upgrade blocked by another tab/SW - waiting for it to close');
+      console.warn('[TF-BookStore] DB upgrade blocked by another tab/SW - waiting for it to close');
     };
 
     request.onupgradeneeded = (event) => {
@@ -249,7 +249,7 @@ export async function openDatabase(userId) {
           cursor.continue();
         };
         cursorReq.onerror = () => {
-          console.warn('[BookStore] v3 migration cursor error - rows will normalize on next write');
+          console.warn('[TF-BookStore] v3 migration cursor error - rows will normalize on next write');
         };
       }
     };
@@ -264,7 +264,7 @@ export async function openDatabase(userId) {
         const uid = _userId;
         _db.close();
         _db = null;
-        console.debug('[BookStore] Closed DB for version upgrade - reopening');
+        console.debug('[TF-BookStore] Closed DB for version upgrade - reopening');
         if (uid) openDatabase(uid).catch(() => { });
       };
 
@@ -273,7 +273,7 @@ export async function openDatabase(userId) {
     };
 
     request.onerror = (event) => {
-      console.error('[BookStore] Failed to open database:', event.target.error);
+      console.error('[TF-BookStore] Failed to open database:', event.target.error);
       _openPromise = null;
       reject(event.target.error);
     };
@@ -304,11 +304,11 @@ export async function resetDatabase(userId) {
     req.onsuccess = () => resolve();
     req.onerror = (e) => reject(e.target.error);
     req.onblocked = () => {
-      console.warn('[BookStore] Delete blocked by another tab - waiting');
+      console.warn('[TF-BookStore] Delete blocked by another tab - waiting');
     };
   });
 
-  console.info('[BookStore] Database deleted, recreating...');
+  console.info('[TF-BookStore] Database deleted, recreating...');
   return openDatabase(userId);
 }
 
@@ -372,7 +372,7 @@ function _writeComposites(posts, { skipFragments = false } = {}) {
       // published blob can't drift in shape.
       pieces = E.buildV2EnvelopePieces(posts);
     } catch (err) {
-      console.warn('[BookStore] decompose for dual-write failed:', err);
+      console.warn('[TF-BookStore] decompose for dual-write failed:', err);
     }
   }
   return new Promise((resolve, reject) => {
@@ -450,7 +450,7 @@ export async function resolvePost(postId, blobOwner, originalAuthor) {
   // 2. SSE post cache (posts delivered via real-time events, not yet in blobs)
   const sseCached = _ssePostCache.get(postId);
   if (sseCached) {
-    console.debug(`[BookStore] resolvePost: found ${postId} in SSE cache`);
+    console.debug(`[TF-BookStore] resolvePost: found ${postId} in SSE cache`);
     return sseCached;
   }
 
@@ -512,7 +512,7 @@ export async function resolvePost(postId, blobOwner, originalAuthor) {
   }
 
   console.warn(
-    `[BookStore] resolvePost: ${postId} not found ` +
+    `[TF-BookStore] resolvePost: ${postId} not found ` +
     `(owner=${blobOwner || 'none'}, author=${originalAuthor || 'none'}) ` +
     `trace=[${trace.join(' | ')}]`
   );
@@ -556,7 +556,7 @@ export function replacePost(newPost, deletePostId) {
     try {
       frags = E.decomposeCompositeToFragments(newPost);
     } catch (err) {
-      console.warn('[BookStore] decompose (replacePost) failed:', err);
+      console.warn('[TF-BookStore] decompose (replacePost) failed:', err);
     }
   }
   return new Promise((resolve, reject) => {
