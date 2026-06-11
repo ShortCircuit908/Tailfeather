@@ -1,6 +1,3 @@
-import { apiFetch } from './apiFetch.js';
-import { inject } from './inject.js';
-
 /**
  * signing.js - Ed25519 key derivation, signing, and verification.
  *
@@ -27,6 +24,46 @@ const STORAGE_KEY_LEGACY_EXPIRY = 'noterook_signing_legacy_expiry';
 const LEGACY_KEY_TTL_DAYS = 30;
 
 const _encoder = new TextEncoder();
+
+/**
+ * Derive a 32-byte Ed25519 seed from a password via PBKDF2.
+ *
+ * ``blogSalt`` is the sideblog per-blog key-derivation salt. When
+ * provided, the PBKDF2 salt becomes ``SIGNING_SALT || ':' || blogSalt``
+ * so every blog under one account derives a distinct keypair - the
+ * cryptographic layer of the pseudonymity story in sideblogs.
+ *
+ * When ``blogSalt`` is omitted/falsy, the legacy single-salt
+ * derivation is used. This is the path every pre-sideblog account
+ * already follows, and it remains valid for:
+ *   - login flows that don't know about blogs yet
+ *   - the one Blog per pre-existing account that was backfilled at
+ *     migration with signing_key_salt=None (so its existing posts
+ *     still verify against the same key)
+ *
+ * Blogs created post-migration (whether by a pre-existing account
+ * or a fresh signup) get a UUID salt and use the salted path.
+ *
+ * @param {string} password
+ * @param {string|null} [blogSalt] - Optional per-blog salt
+ *                                    (UUID string from Blog.signing_key_salt).
+ * @returns {Promise<Uint8Array>} 32-byte seed
+ */
+export async function deriveSigningKey(password, blogSalt = null) {
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', _encoder.encode(password), 'PBKDF2', false, ['deriveBits']
+  );
+  const saltStr = blogSalt
+    ? `${SIGNING_SALT}:${blogSalt}`
+    : SIGNING_SALT;
+  const bits = await crypto.subtle.deriveBits({
+    name: 'PBKDF2',
+    salt: _encoder.encode(saltStr),
+    iterations: PBKDF2_ITERATIONS,
+    hash: 'SHA-256',
+  }, keyMaterial, 256);
+  return new Uint8Array(bits);
+}
 
 /**
  * Derive Ed25519 public key from a 32-byte private seed.
@@ -254,6 +291,61 @@ export function stashPasswordForBlogKeys(password) {
 }
 
 /**
+ * Enumerate the caller's blogs, derive + cache a private key for
+ * every sideblog (non-null signing_key_salt) whose key isn't
+ * already in localStorage. Consumes and wipes the stashed password
+ * from sessionStorage. No-op if no password is stashed (e.g. page
+ * load of an already-authenticated session).
+ *
+ * Call after login / ensurePublicKeyPublished completes.
+ */
+export async function ensureBlogKeys() {
+  let password = null;
+  try {
+    password = sessionStorage.getItem(STORAGE_KEY_PASSWORD_TMP);
+  } catch { /* disabled */ }
+
+  if (!password) {
+    // No password available - we can still check for missing
+    // keys and warn the user, but can't derive.
+    return { derived: 0, missing: 0, password: false };
+  }
+
+  let blogs = [];
+  try {
+    const resp = await fetch('/api/v1/blogs/mine/', {
+      credentials: 'same-origin',
+    });
+    if (!resp.ok) throw new Error(`blogs fetch ${resp.status}`);
+    blogs = await resp.json() || [];
+  } catch (err) {
+    console.warn('[Signing] ensureBlogKeys: blog list fetch failed:', err);
+    return { derived: 0, missing: 0, password: true };
+  }
+
+  let derived = 0;
+  for (const blog of blogs) {
+    if (!blog.signing_key_salt) continue;  // legacy blog uses account key
+    if (loadBlogPrivateKey(blog.username)) continue;  // already cached
+
+    try {
+      const priv = await deriveSigningKey(password, blog.signing_key_salt);
+      const pub = await getPublicKey(priv);
+      storeBlogKey(blog.username, priv, pub);
+      derived++;
+      console.debug(`[Signing] Derived + cached key for @${blog.username}`);
+    } catch (err) {
+      console.error(`[Signing] Failed to derive key for @${blog.username}:`, err);
+    }
+  }
+
+  // Wipe the stash. The password should never outlive its purpose.
+  try { sessionStorage.removeItem(STORAGE_KEY_PASSWORD_TMP); } catch { /* */ }
+
+  return { derived, missing: 0, password: true };
+}
+
+/**
  * Load the private key from localStorage.
  * @returns {Uint8Array|null}
  */
@@ -291,6 +383,34 @@ export function loadLegacyPrivateKey() {
 }
 
 // =========================================================================
+// Degraded-signing notification
+// =========================================================================
+
+/**
+ * Dispatch a custom event when signing is unavailable or degraded.
+ * Listeners (e.g. status-bar, post-composer) can surface this to the user.
+ * @param {string} reason - Human-readable explanation
+ */
+function _notifySigningDegraded(reason) {
+  document.dispatchEvent(new CustomEvent('nr:signing_degraded', {
+    detail: { reason },
+  }));
+}
+
+/**
+ * Check if signing keys are available. If not, fires nr:signing_degraded
+ * so the UI can warn the user. Returns the private key or null.
+ * @returns {Uint8Array|null}
+ */
+export function requirePrivateKey() {
+  const key = loadPrivateKey();
+  if (!key) {
+    _notifySigningDegraded('Signing key unavailable - re-login to restore');
+  }
+  return key;
+}
+
+// =========================================================================
 // Utilities
 // =========================================================================
 
@@ -309,4 +429,143 @@ export function base64ToUint8(b64) {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes;
+}
+
+// =========================================================================
+// Ask payload + sealed-sender helpers
+// =========================================================================
+//
+// Mirrors asks/crypto.py on the server. Any change to these bytes
+// must land in both places at once or signatures break. See
+// DESIGN-asks.md §Wire Format.
+
+const ASK_SIGN_DOMAIN = 'noterook-ask-v1';
+const ASK_SEAL_HKDF_INFO = _encoder.encode('noterook-ask-seal-v1');
+
+/**
+ * Build the canonical signed payload for an ask. Returns Uint8Array.
+ * Both sender (at send time) and moderator (at reveal time) construct
+ * this from the same fields; producing identical bytes is the entire
+ * reason this function exists.
+ *
+ * @param {string} askId
+ * @param {string} recipientUsername
+ * @param {string} body
+ * @param {string} createdAtIso  - millisecond-precision ISO-8601 (Date#toISOString())
+ * @param {string} sigNonce
+ * @returns {Uint8Array}
+ */
+export function buildAskPayload(askId, recipientUsername, body, createdAtIso, sigNonce) {
+  const joined = [
+    ASK_SIGN_DOMAIN, askId, recipientUsername, body, createdAtIso, sigNonce,
+  ].join('\n');
+  return _encoder.encode(joined);
+}
+
+/**
+ * Read the ASK_MOD_PUBLIC_KEY from the body data-attribute. Returns
+ * null if absent - callers should treat absence as "anonymous asks
+ * unavailable" rather than crashing.
+ */
+export function getAskModPublicKeyB64() {
+  return document.body.dataset.askModPubkey || null;
+}
+
+/**
+ * Read the ASK_STAFF_PUBLIC_KEY from the body data-attribute.
+ */
+export function getAskStaffPublicKeyB64() {
+  return document.body.dataset.askStaffPubkey || null;
+}
+
+async function _importModPublicKey(pubKeyB64) {
+  // P-256 uncompressed point (65 bytes). Web Crypto's importKey
+  // accepts 'raw' for ECDH public keys in uncompressed form.
+  const raw = base64ToUint8(pubKeyB64);
+  return crypto.subtle.importKey(
+    'raw', raw, { name: 'ECDH', namedCurve: 'P-256' }, false, [],
+  );
+}
+
+async function _exportUncompressedPoint(publicKey) {
+  // 'raw' export of an ECDH public key yields the uncompressed
+  // point (0x04 || x || y). Matches the server's X962Uncompressed
+  // format byte-for-byte.
+  const buf = await crypto.subtle.exportKey('raw', publicKey);
+  return new Uint8Array(buf);
+}
+
+async function _deriveAskSealAesKey(ephPrivate, modPublic) {
+  // ECDH → 32-byte shared secret → HKDF-SHA256 → AES-GCM key.
+  // Web Crypto can derive an AES key directly from an ECDH agreement
+  // when the algorithm is AES-GCM, but we want HKDF in between for
+  // domain separation. Do it in two steps.
+  const sharedBits = await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: modPublic },
+    ephPrivate,
+    256,
+  );
+  const hkdfKey = await crypto.subtle.importKey(
+    'raw', sharedBits, 'HKDF', false, ['deriveKey'],
+  );
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: new Uint8Array(0),  // match server: salt=None
+      info: ASK_SEAL_HKDF_INFO,
+    },
+    hkdfKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt'],
+  );
+}
+
+/**
+ * Build the sender seal for an anonymous ask.
+ *
+ * Wraps (sender_username, sender_pubkey, signature) with ECIES to the
+ * mod public key. Output format is exactly what asks/crypto.py
+ * decrypt_sender_seal() expects:
+ *
+ *     ephemeral_pub(65) || iv(12) || ciphertext || tag(16)
+ *
+ * Callers pass the base64-encoded ed25519 public key and signature.
+ *
+ * @param {string} senderUsername
+ * @param {string} senderPubKeyB64   - base64 Ed25519 public key (32 bytes)
+ * @param {string} signatureB64      - base64 Ed25519 signature over the ask payload
+ * @returns {Promise<Uint8Array>} the seal bytes, ready to base64-encode and send
+ */
+export async function buildSenderSeal(senderUsername, senderPubKeyB64, signatureB64) {
+  const modPubB64 = getAskModPublicKeyB64();
+  if (!modPubB64) {
+    throw new Error('ASK_MOD_PUBLIC_KEY is not configured; anonymous asks are disabled');
+  }
+  const modPublic = await _importModPublicKey(modPubB64);
+
+  const ephPair = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'],
+  );
+  const aesKey = await _deriveAskSealAesKey(ephPair.privateKey, modPublic);
+
+  const ephPubRaw = await _exportUncompressedPoint(ephPair.publicKey);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const plaintext = _encoder.encode(JSON.stringify({
+    sender_username: senderUsername,
+    sender_pubkey: senderPubKeyB64,
+    signature: signatureB64,
+  }));
+
+  const ctAndTag = new Uint8Array(await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv }, aesKey, plaintext,
+  ));
+
+  // Concat: ephemeral pub || iv || ciphertext || tag
+  const out = new Uint8Array(ephPubRaw.length + iv.length + ctAndTag.length);
+  out.set(ephPubRaw, 0);
+  out.set(iv, ephPubRaw.length);
+  out.set(ctAndTag, ephPubRaw.length + iv.length);
+  return out;
 }
