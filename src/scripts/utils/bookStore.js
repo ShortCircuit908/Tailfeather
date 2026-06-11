@@ -39,23 +39,11 @@
  *        addition_fragments / chain_tips stores added. The own book is
  *        now written + read as signed fragments + chain-tips; POSTS_STORE
  *        is dual-written as a migration-window backup / kill-switch.
- *   v5 - :slugmystery:
  *
- * ~~Requires: idb.min.js (via importmap or global)~~
- * ^ or does it?
+ * Requires: idb.min.js (via importmap or global)
  */
 
-import { fragmentDisplayObject } from './postDaemon.js';
-
-function _fragmentDisplayObjects(posts) {
-  return posts.map(fragmentDisplayObject).reduce((a, c) => {
-    a.root_fragments.push(c.root_fragment);
-    a.addition_fragments.push(...c.addition_fragments);
-    a.chain_tips.push(c.chain_tip);
-  }, { root_fragments: [], addition_fragments: [], chain_tips: [] });
-}
-
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 const POSTS_STORE = 'posts';
 const TOMBSTONES_STORE = 'tombstones';
 const PHANTOM_TAGS_STORE = 'phantom_tags';
@@ -74,6 +62,11 @@ const CHAIN_TIPS_STORE = 'chain_tips';
 // reattaches them onto assembled composites. Only the root author's own
 // posts populate this (decompose gates on root.author === owner).
 const STICKER_SETS_STORE = 'sticker_sets';
+// Reply sets (DB v6). Per-post reply atoms keyed by the ROOT atom id
+// (root_post_id) - root only, no per-addition variant. Same shape and
+// lifecycle as sticker sets: owner-baked, outside the blob signature,
+// reattached onto assembled composites on read.
+const REPLY_SETS_STORE = 'reply_sets';
 
 // Read the own book by assembling composites from the fragment stores
 // (the renderer migration). Behind a flag as a kill-switch: flip to
@@ -81,6 +74,14 @@ const STICKER_SETS_STORE = 'sticker_sets';
 // assembled view ever misbehaves in production. Writes always dual-write
 // regardless, so the legacy fallback stays correct either way.
 const READ_FROM_FRAGMENTS = true;
+
+// post-envelope.js attaches its pure composite<->fragment helpers to the
+// global (same access pattern blob-manager + the SW use). Returns null
+// if it somehow hasn't loaded, so callers degrade to POSTS_STORE instead
+// of throwing.
+function _env() {
+  return (XPCNativeWrapper(window.wrappedJSObject.NRPostEnvelope)) || null;
+}
 
 let _db = null;
 let _userId = null;
@@ -122,7 +123,7 @@ export async function openDatabase(userId) {
     // the upgrade is blocked.  Log a warning and wait - the other
     // connection's onversionchange handler should close it shortly.
     request.onblocked = () => {
-      console.warn('[TF-BookStore] DB upgrade blocked by another tab/SW - waiting for it to close');
+      console.warn('[BookStore] DB upgrade blocked by another tab/SW - waiting for it to close');
     };
 
     request.onupgradeneeded = (event) => {
@@ -205,6 +206,12 @@ export async function openDatabase(userId) {
         db.createObjectStore(STICKER_SETS_STORE, { keyPath: 'key' });
       }
 
+      // Reply sets (DB v6). Keyed by root atom id. Fills from the
+      // publish bake + blob-sync, same as sticker sets.
+      if (!db.objectStoreNames.contains(REPLY_SETS_STORE)) {
+        db.createObjectStore(REPLY_SETS_STORE, { keyPath: 'key' });
+      }
+
       // v3 migration: unify author fields.
       // Collapses `author`/`author_username` to a single `author`
       // field and deletes the `_author_username` /
@@ -242,7 +249,7 @@ export async function openDatabase(userId) {
           cursor.continue();
         };
         cursorReq.onerror = () => {
-          console.warn('[TF-BookStore] v3 migration cursor error - rows will normalize on next write');
+          console.warn('[BookStore] v3 migration cursor error - rows will normalize on next write');
         };
       }
     };
@@ -257,7 +264,7 @@ export async function openDatabase(userId) {
         const uid = _userId;
         _db.close();
         _db = null;
-        console.debug('[TF-BookStore] Closed DB for version upgrade - reopening');
+        console.debug('[BookStore] Closed DB for version upgrade - reopening');
         if (uid) openDatabase(uid).catch(() => { });
       };
 
@@ -266,7 +273,7 @@ export async function openDatabase(userId) {
     };
 
     request.onerror = (event) => {
-      console.error('[TF-BookStore] Failed to open database:', event.target.error);
+      console.error('[BookStore] Failed to open database:', event.target.error);
       _openPromise = null;
       reject(event.target.error);
     };
@@ -297,11 +304,11 @@ export async function resetDatabase(userId) {
     req.onsuccess = () => resolve();
     req.onerror = (e) => reject(e.target.error);
     req.onblocked = () => {
-      console.warn('[TF-BookStore] Delete blocked by another tab - waiting');
+      console.warn('[BookStore] Delete blocked by another tab - waiting');
     };
   });
 
-  console.info('[TF-BookStore] Database deleted, recreating...');
+  console.info('[BookStore] Database deleted, recreating...');
   return openDatabase(userId);
 }
 
@@ -344,8 +351,6 @@ export function storePosts(posts, { skipFragments = false } = {}) {
   return _writeComposites(posts, { skipFragments });
 }
 
-
-
 /**
  * Dual-write composites to POSTS_STORE (migration-window backup) AND the
  * fragment stores (read source of truth), atomically in a single
@@ -357,17 +362,22 @@ export function storePosts(posts, { skipFragments = false } = {}) {
  * outright; the next blob round-trip backfills the fragment stores.
  */
 function _writeComposites(posts, { skipFragments = false } = {}) {
+  const E = _env();
   let pieces = null;
-  if (!skipFragments) {
+  if (!skipFragments && E?.buildV2EnvelopePieces) {
     try {
-      pieces = _fragmentDisplayObjects(posts);
+      // No owner arg: decompose defaults each post's blob owner from
+      // its own attribution. Same decompose+accumulate the publisher
+      // uses (buildBlob), so the local fragment stores and the
+      // published blob can't drift in shape.
+      pieces = E.buildV2EnvelopePieces(posts);
     } catch (err) {
-      console.warn('[TF-BookStore] decompose for dual-write failed:', err);
+      console.warn('[BookStore] decompose for dual-write failed:', err);
     }
   }
   return new Promise((resolve, reject) => {
     const stores = pieces
-      ? [POSTS_STORE, ROOT_FRAGMENTS_STORE, ADDITION_FRAGMENTS_STORE, CHAIN_TIPS_STORE, STICKER_SETS_STORE]
+      ? [POSTS_STORE, ROOT_FRAGMENTS_STORE, ADDITION_FRAGMENTS_STORE, CHAIN_TIPS_STORE, STICKER_SETS_STORE, REPLY_SETS_STORE]
       : [POSTS_STORE];
     const tx = _getDb().transaction(stores, 'readwrite');
     const postStore = tx.objectStore(POSTS_STORE);
@@ -390,6 +400,13 @@ function _writeComposites(posts, { skipFragments = false } = {}) {
       // inferred from a composite write.
       const skStore = tx.objectStore(STICKER_SETS_STORE);
       for (const s of (pieces.sticker_sets || [])) skStore.put(s);
+
+      // Reply sets: same PUT-only contract as sticker sets - the
+      // store is authoritative and emptied only by the explicit
+      // removal path (deleteReplySet), never inferred from a
+      // composite write.
+      const rpStore = tx.objectStore(REPLY_SETS_STORE);
+      for (const s of (pieces.reply_sets || [])) rpStore.put(s);
     }
     tx.oncomplete = () => resolve();
     tx.onerror = (e) => reject(e.target.error);
@@ -433,7 +450,7 @@ export async function resolvePost(postId, blobOwner, originalAuthor) {
   // 2. SSE post cache (posts delivered via real-time events, not yet in blobs)
   const sseCached = _ssePostCache.get(postId);
   if (sseCached) {
-    console.debug(`[TF-BookStore] resolvePost: found ${postId} in SSE cache`);
+    console.debug(`[BookStore] resolvePost: found ${postId} in SSE cache`);
     return sseCached;
   }
 
@@ -495,7 +512,7 @@ export async function resolvePost(postId, blobOwner, originalAuthor) {
   }
 
   console.warn(
-    `[TF-BookStore] resolvePost: ${postId} not found ` +
+    `[BookStore] resolvePost: ${postId} not found ` +
     `(owner=${blobOwner || 'none'}, author=${originalAuthor || 'none'}) ` +
     `trace=[${trace.join(' | ')}]`
   );
@@ -533,15 +550,18 @@ export function cacheSSEPost(post) {
  * @returns {Promise<void>}
  */
 export function replacePost(newPost, deletePostId) {
+  const E = _env();
   let frags = null;
-  try {
-    frags = _fragmentDisplayObjects([newPost]);
-  } catch (err) {
-    console.warn('[TF-BookStore] decompose (replacePost) failed:', err);
+  if (E?.decomposeCompositeToFragments) {
+    try {
+      frags = E.decomposeCompositeToFragments(newPost);
+    } catch (err) {
+      console.warn('[BookStore] decompose (replacePost) failed:', err);
+    }
   }
   return new Promise((resolve, reject) => {
     const stores = frags
-      ? [POSTS_STORE, ROOT_FRAGMENTS_STORE, ADDITION_FRAGMENTS_STORE, CHAIN_TIPS_STORE, STICKER_SETS_STORE]
+      ? [POSTS_STORE, ROOT_FRAGMENTS_STORE, ADDITION_FRAGMENTS_STORE, CHAIN_TIPS_STORE, STICKER_SETS_STORE, REPLY_SETS_STORE]
       : [POSTS_STORE, CHAIN_TIPS_STORE];
     const tx = _getDb().transaction(stores, 'readwrite');
     const postStore = tx.objectStore(POSTS_STORE);
@@ -566,6 +586,9 @@ export function replacePost(newPost, deletePostId) {
       // - no delete sweep (see _writeComposites for why).
       const skStore = tx.objectStore(STICKER_SETS_STORE);
       for (const s of (frags.stickerSets || [])) skStore.put(s);
+      // Reply sets share the atom-id keying, so a replace PUTs too.
+      const rpStore = tx.objectStore(REPLY_SETS_STORE);
+      for (const s of (frags.replySets || [])) rpStore.put(s);
     }
     tx.oncomplete = () => resolve();
     tx.onerror = (e) => reject(e.target.error);
@@ -586,13 +609,14 @@ export function deletePost(postId) {
     // chain-tips an orphaned fragment is already invisible. Orphan
     // GC is a separate deferred sweep (DESIGN-fragment-storage.md
     // "What v1 Does Not Do").
-    const tx = db.transaction([POSTS_STORE, CHAIN_TIPS_STORE, STICKER_SETS_STORE], 'readwrite');
+    const tx = db.transaction([POSTS_STORE, CHAIN_TIPS_STORE, STICKER_SETS_STORE, REPLY_SETS_STORE], 'readwrite');
     tx.objectStore(POSTS_STORE).delete(postId);
     tx.objectStore(CHAIN_TIPS_STORE).delete(postId);
     // Drop the post's root sticker set. Addition sticker-keys orphan
     // like addition fragments do (invisible once the tip is gone);
     // GC is the same deferred sweep.
     tx.objectStore(STICKER_SETS_STORE).delete(postId);
+    tx.objectStore(REPLY_SETS_STORE).delete(postId);
     tx.oncomplete = () => resolve();
     tx.onerror = (e) => reject(e.target.error);
   });
@@ -640,7 +664,27 @@ function _getAllLegacyPosts() {
  * envelope helper isn't available.
  */
 async function _assembleOwnBookFromStores() {
-  return _getAllLegacyPosts();
+  const E = _env();
+  if (!E?.assembleOwnBook) return _getAllLegacyPosts();
+  const [tips, roots, additions, stickerSets, replySets, mineIds, legacyKeys] = await Promise.all([
+    getAllChainTips(),
+    getAllRootFragments(),
+    getAllAdditionFragments(),
+    getAllStickerSets(),
+    getAllReplySets(),
+    _getMyLegacyPostIds(),  // cheap: own post_ids from the is_mine index
+    _getLegacyPostKeys(),   // cheap: all post_ids, no body deserialization
+  ]);
+  // Only legacy rows NOT yet represented as a chain-tip need their full
+  // body merged in (pre-migration / un-fragmented content). In steady
+  // state this is empty, so we never deserialize the dual-written
+  // (potentially bloated) composite bodies on a render - just their keys
+  // above + the is_mine index keys. This keeps render-time reads off the
+  // full POSTS_STORE scan the dual-write would otherwise force.
+  const tipIds = new Set(tips.map((t) => t.post_id));
+  const missingIds = legacyKeys.filter((k) => !tipIds.has(k));
+  const legacyPosts = missingIds.length ? await _getLegacyPostsByIds(missingIds) : [];
+  return E.assembleOwnBook({ tips, roots, additions, legacyPosts, stickerSets, replySets, mineIds: new Set(mineIds) });
 }
 
 // Cheap key-only read: every composite's post_id without deserializing the
@@ -1032,7 +1076,7 @@ export function clearAll() {
     const tx = db.transaction([
       POSTS_STORE, TOMBSTONES_STORE, PHANTOM_TAGS_STORE, METADATA_STORE,
       ROOT_FRAGMENTS_STORE, ADDITION_FRAGMENTS_STORE, CHAIN_TIPS_STORE,
-      STICKER_SETS_STORE,
+      STICKER_SETS_STORE, REPLY_SETS_STORE,
     ], 'readwrite');
     tx.objectStore(POSTS_STORE).clear();
     tx.objectStore(TOMBSTONES_STORE).clear();
@@ -1042,6 +1086,7 @@ export function clearAll() {
     tx.objectStore(ADDITION_FRAGMENTS_STORE).clear();
     tx.objectStore(CHAIN_TIPS_STORE).clear();
     tx.objectStore(STICKER_SETS_STORE).clear();
+    tx.objectStore(REPLY_SETS_STORE).clear();
     tx.oncomplete = () => resolve();
     tx.onerror = (e) => reject(e.target.error);
   });
@@ -1286,6 +1331,58 @@ export function deleteStickerSet(key) {
 }
 
 /**
+ * All reply-set atoms ({key, replies}), keyed by root atom id. Read in
+ * full on assembly and reattached onto composites - what keeps a post's
+ * replies readable after the live Redis copy has expired.
+ */
+export function getAllReplySets() {
+  return new Promise((resolve, reject) => {
+    const tx = _getDb().transaction(REPLY_SETS_STORE, 'readonly');
+    const req = tx.objectStore(REPLY_SETS_STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+/**
+ * Upsert reply-set atoms ({key, replies}). Empty sets are deleted
+ * rather than stored, same contract as storeStickerSets.
+ */
+export function storeReplySets(sets) {
+  return new Promise((resolve, reject) => {
+    const tx = _getDb().transaction(REPLY_SETS_STORE, 'readwrite');
+    const store = tx.objectStore(REPLY_SETS_STORE);
+    for (const s of (sets || [])) {
+      if (!s || !s.key) continue;
+      if (Array.isArray(s.replies) && s.replies.length) store.put(s);
+      else store.delete(s.key);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
+
+/** Read one reply-set atom by key, or null. */
+export function getReplySet(key) {
+  return new Promise((resolve, reject) => {
+    const tx = _getDb().transaction(REPLY_SETS_STORE, 'readonly');
+    const req = tx.objectStore(REPLY_SETS_STORE).get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+/** Delete one reply-set atom by key (deletion / tombstone un-bake). */
+export function deleteReplySet(key) {
+  return new Promise((resolve, reject) => {
+    const tx = _getDb().transaction(REPLY_SETS_STORE, 'readwrite');
+    tx.objectStore(REPLY_SETS_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
+
+/**
  * Find every chain-tip that references a given fragment id (root or
  * addition). Used by the tombstone application path to invalidate
  * composites whose constituent fragments have been pulled.
@@ -1314,11 +1411,11 @@ export function deleteChainTip(postId) {
  * failure can't leave a chain-tip referencing fragments that didn't
  * land.
  */
-export function storeFragmentBatch({ roots = [], additions = [], tips = [], stickerSets = [] } = {}) {
-  if (!roots.length && !additions.length && !tips.length && !stickerSets.length) return Promise.resolve();
+export function storeFragmentBatch({ roots = [], additions = [], tips = [], stickerSets = [], replySets = [] } = {}) {
+  if (!roots.length && !additions.length && !tips.length && !stickerSets.length && !replySets.length) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const tx = _getDb().transaction([
-      ROOT_FRAGMENTS_STORE, ADDITION_FRAGMENTS_STORE, CHAIN_TIPS_STORE, STICKER_SETS_STORE,
+      ROOT_FRAGMENTS_STORE, ADDITION_FRAGMENTS_STORE, CHAIN_TIPS_STORE, STICKER_SETS_STORE, REPLY_SETS_STORE,
     ], 'readwrite');
     const rootStore = tx.objectStore(ROOT_FRAGMENTS_STORE);
     for (const r of roots) rootStore.put(r);
@@ -1334,6 +1431,13 @@ export function storeFragmentBatch({ roots = [], additions = [], tips = [], stic
     const skStore = tx.objectStore(STICKER_SETS_STORE);
     for (const s of stickerSets) {
       if (s && s.key && Array.isArray(s.stickers) && s.stickers.length) skStore.put(s);
+    }
+    // Reply-set atoms ride the same round-trip for the same reason:
+    // the read path assembles replies from these, so a fetched blob's
+    // conversation survives Redis expiry locally too.
+    const rpStore = tx.objectStore(REPLY_SETS_STORE);
+    for (const s of replySets) {
+      if (s && s.key && Array.isArray(s.replies) && s.replies.length) rpStore.put(s);
     }
     tx.oncomplete = () => resolve();
     tx.onerror = (e) => reject(e.target.error);
