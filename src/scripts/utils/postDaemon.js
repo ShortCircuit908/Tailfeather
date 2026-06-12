@@ -12,6 +12,8 @@ const BlobManager = await NR.BlobManager();
 
 const FETCH_CONCURRENCY = 12;
 
+const _readBefore = new Set();
+
 /**
  * Run `worker` over `items` with at most `limit` concurrent in flight.
  * Unlike `Promise.all` over fixed batches, a fast worker picks up the
@@ -68,13 +70,8 @@ function _usersFromFragments(roots, chainTips) {
  * @param {object} blob - user blob
  * @returns {object?} fragments, null if blob data contains an error 
  */
-function _unwrapBlob(blob, username) {
-  if (!blob || blob.error) {
-    console.warn(`[Solidifer] Failed to obtain blob for user ${username}`, blob);
-    return;
-  }
-
-  const { root_fragments, addition_fragments, chain_tips } = blob.envelope;
+function _unwrapBlob({ envelope: { author, root_fragments, addition_fragments, chain_tips } }) {
+  _readBefore.add(author);
   return { root_fragments, addition_fragments, chain_tips };
 }
 
@@ -85,7 +82,13 @@ function _unwrapBlob(blob, username) {
  */
 async function _fetchUserBlobs(usernames) {
   const userBlobs = await _pMap(usernames, BlobManager.fetchBlobCached);
-  const blobFragments = defined(userBlobs.map((blob, i) => _unwrapBlob(blob, usernames[i])));
+  const blobFragments = userBlobs.filter((blob, i) => {
+    if (!blob || blob.error) {
+      console.warn(`[Solidifer] Failed to obtain blob for ${usernames[i]}`, blob);
+      return false;
+    } else if (_readBefore.has(blob.envelope.author) && blob.method === 'cache-hit') return false; // Blob is up-to-date and we've read it before
+    else return true;
+  }).map(_unwrapBlob);
   const rootFragments = new Map(), additionFragments = new Map(), chainTips = new Map();
 
   blobFragments.forEach(({ root_fragments, addition_fragments, chain_tips }) => {
