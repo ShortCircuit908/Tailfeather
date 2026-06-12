@@ -1,7 +1,7 @@
 /* PostDaemon: All-in-one post wrangling, caching, and reassembly module */
 
 import { clearData, getData, updateData } from './database.js';
-import { fetchBlobCached } from './blobManager.js';
+//import { fetchBlobCached } from './blobManager.js';
 import { defined, unique, uniqueDefined, uniqueFn } from './jsTools.js';
 import { extractUserFromHref, cacheAvatar } from './users.js';
 import { parseTags } from './elements.js';
@@ -9,6 +9,7 @@ import { userInfo } from './activeBlogs.js';
 import NR from './noterook.js';
 
 const BookStore = await NR.BookStore();
+const BlobManager = await NR.BlobManager();
 
 const FETCH_CONCURRENCY = 12;
 
@@ -20,6 +21,7 @@ const FETCH_CONCURRENCY = 12;
  * nineteen others finish in 200ms.
  */
 async function _pMap(items, worker) {
+  console.log(worker)
   const results = new Array(items.length);
   let idx = 0;
   async function runner() {
@@ -84,7 +86,7 @@ function _unwrapBlob(blob, username) {
  * @returns {object} amalgamated blob data
  */
 async function _fetchUserBlobs(usernames) {
-  const userBlobs = await _pMap(usernames, fetchBlobCached);
+  const userBlobs = await _pMap(usernames, BlobManager.fetchBlobCached);
   const blobFragments = defined(userBlobs.map((blob, i) => _unwrapBlob(blob, usernames[i])));
   const rootFragments = new Map(), additionFragments = new Map(), chainTips = new Map();
 
