@@ -1,6 +1,13 @@
 import { noact } from './noact.js';
-import { parseTags } from './composer.js';
 import { getActiveBlog, listBlogs } from './activeBlogs.js';
+
+export function parseTags(input) {
+  if (!input) return [];
+  const tags = input.split(/[,，、]/)
+    .map(t => t.trim().toLowerCase().replace(/^#/, ''))
+    .filter(t => t.length > 0 && t.length <= 100);
+  return [...new Set(tags)].slice(0, 30);
+}
 
 /**
  * Format a tag input into tag elements

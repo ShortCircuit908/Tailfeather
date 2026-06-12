@@ -4,9 +4,11 @@ import { clearData, getData, updateData } from './database.js';
 import { fetchBlobCached } from './blobManager.js';
 import { defined, unique, uniqueDefined, uniqueFn } from './jsTools.js';
 import { extractUserFromHref, cacheAvatar } from './users.js';
-import { parseTags } from './composer.js';
-import * as BookStore from './bookStore.js';
+import { parseTags } from './elements.js';
 import { userInfo } from './activeBlogs.js';
+import NR from './noterook.js';
+
+const BookStore = await NR.BookStore();
 
 const FETCH_CONCURRENCY = 12;
 

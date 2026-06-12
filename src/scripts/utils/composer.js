@@ -1,20 +1,15 @@
 import { apiFetch } from './apiFetch.js';
 import { getActiveBlog, userInfo } from './activeBlogs.js'
-import * as Signing from './signing.js';
-import * as BookStore from './bookStore.js';
+import { parseTags } from './elements.js';
 import { fragmentDisplayObject } from './postDaemon.js';
 import { updateData } from './database.js';
+import NR from './noterook.js';
+
+const BookStore = await NR.BookStore();
+const Signing = await NR.Signing();
 
 const MAX_POST_BODY_LENGTH = 100_000;
 const MAX_ADDITION_BODY_LENGTH = 20_000;
-
-export function parseTags(input) {
-  if (!input) return [];
-  const tags = input.split(/[,，、]/)
-    .map(t => t.trim().toLowerCase().replace(/^#/, ''))
-    .filter(t => t.length > 0 && t.length <= 100);
-  return [...new Set(tags)].slice(0, 30);
-}
 
 export function generatePostId() {
   const timestamp = Date.now().toString(16);
@@ -189,7 +184,8 @@ export async function createPost(body, tagsInput, blog, options = {}) {
   }
 
   // Store to IndexedDB (Single Gateway)
-  await BookStore.openDatabase(userInfo.id).then(() => BookStore.storePost(post));
+  await BookStore.openDatabase(userInfo.id);
+  BookStore.storePost(post);
 
   // store to tailfeather stores (fragmented)
   const { root_fragment, chain_tip } = fragmentDisplayObject(post);

@@ -52,6 +52,16 @@
       "css": [
         "scripts/customIcons.css"
       ]
+    },
+    {
+      "matches": [
+        "*://*.noterook.net/*"
+      ],
+      "run_at": "document_start",
+      "js": [
+        "scripts/inject/statics.js"
+      ],
+      "world": "MAIN"
     }
   ],
   "background": {
