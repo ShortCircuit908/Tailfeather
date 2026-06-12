@@ -20,7 +20,6 @@ const FETCH_CONCURRENCY = 12;
  * nineteen others finish in 200ms.
  */
 async function _pMap(items, worker) {
-  console.log(worker)
   const results = new Array(items.length);
   let idx = 0;
   async function runner() {
