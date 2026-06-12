@@ -1,3 +1,14 @@
+# v1.6.0
+
+## General
+
+- Now pulls BookStore, BlobManager, and Signing utilities straight from Noterook, no local copies needed
+- Minor performance increase to caching data from user blobs; no new processing is done if the blob has not change from last time the cache was checked
+
+## Display Source
+
+- Fixed minor bugs affecting skipped posts being given another shot to render their source displays
+
 # v1.5.1
 
 ## General
