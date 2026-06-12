@@ -1,7 +1,6 @@
 /* PostDaemon: All-in-one post wrangling, caching, and reassembly module */
 
 import { clearData, getData, updateData } from './database.js';
-//import { fetchBlobCached } from './blobManager.js';
 import { defined, unique, uniqueDefined, uniqueFn } from './jsTools.js';
 import { extractUserFromHref, cacheAvatar } from './users.js';
 import { parseTags } from './elements.js';
