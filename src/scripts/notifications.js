@@ -7,10 +7,49 @@ class NotifBuilder {
   static postUrl = "/book/{0}/?post={1}";
   static bookUrl = "/book/{0}/";
   static inboxUrl = "/inbox/";
+  
+  /**
+   * Collect actor information into a uniform structure
+   *
+   * @param {object} notif
+   * @returns {{
+   *   username: string,
+   *   displayName: string,
+   *   avatarUrl: string
+   * }}
+   */
   getActor(notif) {}
+  
+  /**
+   * Get additional parameters for use in {@link bodyTextTemplate}
+   *
+   * @param {object} notif
+   * @return {string[]}
+   */
   getDetails(notif) {}
+  
+  /**
+   * Get a path to the post referred to by the notification
+   *
+   * @param {object} notif
+   * @return {string}
+   */
   getLink(notif) {}
-  get bodyText() {}
+  
+  /**
+   * Get a string template for the notification's text body
+   * Placeholders are numbered in braces, e.g. {0} {1} {2} etc...
+   *
+   * @return {string}
+   */
+  get bodyTextTemplate() {}
+  
+  /**
+   * Assemble Noterook notification events into push notifications
+   *
+   * @param {object} notif
+   * @returns {Notification}
+   */
   buildNotification(notif) {
     const actor = this.getActor(notif);
     if(notif.is_anonymous){
@@ -19,7 +58,7 @@ class NotifBuilder {
     }
     const ownerBlog = notif.recipient || activeSlug;
     const actorName = actor.displayName || actor.username;
-    const format = this.bodyText || ('{} ' + notif.type);
+    const format = this.bodyTextTemplate || ('{} ' + notif.type);
     const bodyText = formatString(format, actorName, ...(this.getDetails(notif) || []));
     const avatarLink = actor.avatarUrl && _isSafeUrl(actor.avatarUrl) ? actor.avatarUrl : '';
     const notification = new Notification(`New Noterook notification on ${ownerBlog}`, { body: bodyText, icon: avatarLink, data: notif });
@@ -46,7 +85,7 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.bookUrl, encodeURIComponent(this.getActor(notif).username));
     }
-    get bodyText() {
+    get bodyTextTemplate() {
       return '{0} followed you';
     }
   }),
@@ -61,7 +100,7 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
     }
-    get bodyText() {
+    get bodyTextTemplate() {
       return '{0} posted';
     }
     buildNotification(notif) {
@@ -82,7 +121,7 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
     }
-    get bodyText() {
+    get bodyTextTemplate() {
       return '{0} added to a post';
     }
     buildNotification(notif) {
@@ -101,7 +140,7 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
     }
-    get bodyText() {
+    get bodyTextTemplate() {
       return '{0} stapled a post';
     }
     buildNotification(notif) {
@@ -122,7 +161,7 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.own_post_id || notif.post_id));
     }
-    get bodyText() {
+    get bodyTextTemplate() {
       return '{0} {1} your post';
     }
     getDetails(notif) {
@@ -140,7 +179,7 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.own_post_id || notif.post_id));
     }
-    get bodyText() {
+    get bodyTextTemplate() {
       return '{0} {1} a post you added to';
     }
     getDetails(notif) {
@@ -159,7 +198,7 @@ const notificationHandlers = {
       const rootId = String(notif.post_id).split(':', 1)[0];
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(rootId));
     }
-    get bodyText() {
+    get bodyTextTemplate() {
       return '{0} reacted {1} to your post';
     }
     getDetails(notif) {
@@ -177,7 +216,7 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
     }
-    get bodyText() {
+    get bodyTextTemplate() {
       return '{0} replied to your post';
     }
   }),
@@ -192,7 +231,7 @@ const notificationHandlers = {
     getLink(notif) {
       return NotifBuilder.inboxUrl;
     }
-    get bodyText() {
+    get bodyTextTemplate() {
       return '{0} {1}';
     }
     getDetails(notif) {
@@ -202,15 +241,15 @@ const notificationHandlers = {
   'ask_answered': new (class extends NotifBuilder {
     getActor(notif) {
       return {
-        username: notif.sender,
-        displayName: notif.sender_name,
-        avatarUrl: notif.sender_avatar
+        username: notif.answerer,
+        displayName: notif.answerer_name,
+        avatarUrl: notif.answerer_avatar
       };
     }
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.answer_post_id));
     }
-    get bodyText() {
+    get bodyTextTemplate() {
       return '{0} answered your ask';
     }
   })
