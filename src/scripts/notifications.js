@@ -1,9 +1,23 @@
-import { getStorage } from './utils/jsTools.js';
+import { getOptions, getStorage } from './utils/jsTools.js';
 import { noact } from './utils/noact.js';
 import { isBlockedUser } from './utils/blockManager.js';
 import { activeSlug } from './utils/activeBlogs.js';
 
+const target_events = [
+  'nr:followed',
+  'nr:new_post',
+  'nr:new_addition',
+  'nr:new_staple',
+  'nr:post_stapled',
+  'nr:post_stickered',
+  'nr:new_ask',
+  'nr:post_replied'
+];
+
 let _requestInProgress = false;
+let _channel;
+
+let followedUsers;
 
 async function _cancel() {
   return getStorage(['preferences']).then(async ({ preferences }) => {
@@ -57,24 +71,11 @@ function _buildNotificationItem(notif, opts = {}) {
   // book and 404 (Sel's report).
   const ownerBlog = notif.recipient || selfUsername;
 
-  const actor = notif.username || notif.stapler || notif.sticker_by
-    || notif.sender || notif.answerer || '';
-  // Anonymity scrub for asks AND stickers. The server omits the
-  // placer / sender handle when is_anonymous is set (see
-  // api/stickers.py place_sticker + agree_sticker, api/asks.py);
-  // the client must match so display names, avatars, and profile
-  // links never leak the real identity.
-  const isAnonAsk = notif.type === 'new_ask' && notif.is_anonymous;
-  const isAnonSticker = notif.type === 'post_stickered' && notif.is_anonymous;
-  const isAnon = isAnonAsk || isAnonSticker;
-  const actorName = isAnon
-    ? 'anonymous'
-    : (notif.display_name || notif.stapler_name || notif.sticker_by_name
-      || notif.sender_name || notif.answerer_name || actor || 'someone');
-  const avatarUrl = isAnon
-    ? ''
-    : (notif.avatar_url || notif.stapler_avatar || notif.sticker_by_avatar
-      || notif.sender_avatar || notif.answerer_avatar || '');
+  const {
+    username: actor,
+    displayName:actorName,
+    avatarUrl: avatarUrl
+  } = _getAuthorDetails(notif);
 
   let bodyText = '';
   if (notif.type === 'followed') {
@@ -96,6 +97,23 @@ function _buildNotificationItem(notif, opts = {}) {
     bodyText = notif.from_staff ? 'sent you a staff message' : 'asked you something';
   } else if (notif.type === 'ask_answered') {
     bodyText = 'answered your ask';
+  } else if (notif.type === 'ask-answered') {
+    bodyText = 'replied to your post';
+  } else if (notif.type === 'new_post') {
+    if (!followedUsers.includes(actor.toLowerCase())) {
+      return null;
+    }
+    bodyText = 'posted';
+  } else if (notif.type === 'new_addition') {
+    if (!followedUsers.includes(actor.toLowerCase())) {
+      return null;
+    }
+    bodyText = 'added to a post';
+  } else if (notif.type === 'new_staple') {
+    if (!followedUsers.includes(actor.toLowerCase())) {
+      return null;
+    }
+    bodyText = 'stapled a post';
   } else {
     bodyText = notif.type;
   }
@@ -104,6 +122,72 @@ function _buildNotificationItem(notif, opts = {}) {
 
   const notificationObj = new Notification(`New Noterook notification on ${ownerBlog}`, { body: `${actorName} ${bodyText}`, icon: avatarLink, data: notif });
   return notificationObj;
+}
+
+/**
+ * Transform actor information into a uniform structure
+ *
+ * @param {object} notif
+ * @returns {{username: string, displayName: string, avatar: string}}
+ */
+function _getAuthorDetails(notif){
+  let authorUsername = '';
+  let authorDisplayName = 'someone';
+  let authorAvatar = '';
+  switch (notif.type) {
+    case 'new_post':
+      authorUsername = notif.author;
+      authorDisplayName = notif.author_name;
+      authorAvatar = notif.author_avatar;
+      break;
+    case 'new_addition':
+      const addition = notif.additions.find(addition => addition.post_id === notif.post_id);
+      authorUsername = addition.author;
+      authorDisplayName = addition.author_name;
+      break;
+    case 'new_staple':
+      authorUsername = notif.author;
+      authorDisplayName = notif.author;
+      break;
+    case 'post_stickered':
+      authorUsername = notif.sticker_by;
+      authorDisplayName = notif.sticker_by_name;
+      authorAvatar = notif.sticker_by_avatar;
+      break;
+    case 'new_ask':
+      authorUsername = notif.sender;
+      authorDisplayName = notif.sender_name;
+      authorAvatar = notif.sender_avatar;
+      break;
+    case 'post_replied':
+      authorUsername = notif.reply_by;
+      authorDisplayName = notif.reply_by_name;
+      authorAvatar = notif.reply_by_avatar;
+      break;
+    case 'post_stapled':
+      authorUsername = notif.stapler;
+      authorDisplayName = notif.stapler_name;
+      authorAvatar = notif.stapler_avatar;
+      break;
+    case 'followed':
+      authorUsername = notif.username;
+      authorDisplayName = notif.display_name;
+      authorAvatar = notif.avatar_url;
+      break;
+  }
+  if (notif.is_anonymous) {
+    authorDisplayName = 'anonymous';
+    authorAvatar = '';
+  }
+  return {
+    username: authorUsername,
+    displayName: authorDisplayName,
+    avatar: authorAvatar
+  }
+}
+
+function _parseFollowedUsers(str){
+  return str.toLowerCase().split('\n').map(item => item.trim()).filter(item=> item.length > 0);
 }
 
 function _onNotification(e) {
@@ -120,13 +204,28 @@ function _onNotification(e) {
 }
 
 function _run() {
-  document.addEventListener('nr:post_stapled', _onNotification);
-  document.addEventListener('nr:post_stickered', _onNotification);
-  document.addEventListener('nr:followed', _onNotification);
-  document.addEventListener('nr:new_ask', _onNotification);
+  if (!_channel) {
+    _channel = new BroadcastChannel('nr_tab_sync');
+    _channel.onmessage = message => {
+      const data = message.data;
+      if (!data || !data.type) {
+        return;
+      }
+      if (data.type === 'sse_event' && target_events.includes(data.eventName)) {
+        _onNotification(data);
+      }
+    };
+  }
+}
+
+export const update = async function (options){
+  const { followedUsers: followedUsersRaw } = options;
+  followedUsers = _parseFollowedUsers(followedUsersRaw);
 }
 
 export const main = async () => {
+  const { followedUsers: followedUsersRaw } = await getOptions('notifications');
+  followedUsers = _parseFollowedUsers(followedUsersRaw);
   if (Notification.permission === 'denied') {
     await _cancel();
     return;
@@ -143,4 +242,10 @@ export const main = async () => {
     }))
   } else _run();
 };
-export const clean = async () => { };
+
+export const clean = async () => {
+  if(_channel){
+    _channel.close();
+    _channel = null;
+  }
+};
