@@ -66,7 +66,7 @@ const notificationHandlers = {
     }
     buildNotification(notif) {
       if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())) {
-        //return null;
+        return null;
       }
       return super.buildNotification(notif);
     }
@@ -87,7 +87,7 @@ const notificationHandlers = {
     }
     buildNotification(notif) {
       if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())) {
-        //return null;
+        return null;
       }
       return super.buildNotification(notif);
     }
@@ -106,7 +106,7 @@ const notificationHandlers = {
     }
     buildNotification(notif) {
       if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())) {
-        //return null;
+        return null;
       }
       return super.buildNotification(notif);
     }
