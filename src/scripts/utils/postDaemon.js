@@ -26,6 +26,7 @@ async function _pfMap(items, worker) {
   const results = new Array(items.length);
   let nextIdx = 0;
   async function runner() {
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const idx = nextIdx++;
       if (idx >= items.length) return;
