@@ -161,3 +161,7 @@ export const numFormat = num => {
 }
 
 export const hasMouse = () => matchMedia('(pointer:fine)').matches; // (any-hover:hover) might be of more use in some cases
+
+export const formatString = (template, ...args) => {
+  return template.replace(/{([0-9]+)}/g, (match, index) => typeof args[index] === 'undefined' ? match : args[index]);
+}

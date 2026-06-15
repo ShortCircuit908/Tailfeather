@@ -39,3 +39,12 @@ const connected = p => {
 browser.runtime.onConnect.addListener(connected);
 
 browser.runtime.onSuspend.addListener(() => { console.log("Unloading."); });
+
+browser.runtime.onMessage.addListener(message => {
+  if (message && message.type === "open_url"){
+    const url = message.url;
+    if(url){
+      browser.tabs.create({url: url});
+    }
+  }
+});
