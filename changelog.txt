@@ -1,3 +1,15 @@
+v1.6.1
+
+General
+
+- Notable performance improvements related to blob fetching & resource caching
+
+Push Notifications
+
+- Comprehensive feature overhaul by the lovely @shortcircuit908
+  - Added notifications for missing activity types such as replies
+  - You can now receive notifications when subscribed users post
+
 v1.6.0
 
 General
