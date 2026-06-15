@@ -4,10 +4,12 @@ import { isBlockedUser } from './utils/blockManager.js';
 import { activeSlug } from './utils/activeBlogs.js';
 
 class NotifBuilder {
-  static postUrl = "/book/{0}/?post={1}";
-  static bookUrl = "/book/{0}/";
-  static inboxUrl = "/inbox/";
-  
+  static postUrl = '/book/{0}/?post={1}';
+  static bookUrl = '/book/{0}/';
+  static inboxUrl = '/inbox/';
+
+  bodyTextTemplate = '';
+
   /**
    * Collect actor information into a uniform structure
    *
@@ -18,32 +20,24 @@ class NotifBuilder {
    *   avatarUrl: string
    * }}
    */
-  getActor(notif) {}
-  
+  getActor(notif) { }
+
   /**
    * Get additional parameters for use in {@link bodyTextTemplate}
    *
    * @param {object} notif
    * @return {string[]}
    */
-  getDetails(notif) {}
-  
+  getDetails(notif) { }
+
   /**
    * Get a path to the post referred to by the notification
    *
    * @param {object} notif
    * @return {string}
    */
-  getLink(notif) {}
-  
-  /**
-   * Get a string template for the notification's text body
-   * Placeholders are numbered in braces, e.g. {0} {1} {2} etc...
-   *
-   * @return {string}
-   */
-  get bodyTextTemplate() {}
-  
+  getLink(notif) { }
+
   /**
    * Assemble Noterook notification events into push notifications
    *
@@ -52,7 +46,7 @@ class NotifBuilder {
    */
   buildNotification(notif) {
     const actor = this.getActor(notif);
-    if(notif.is_anonymous){
+    if (notif.is_anonymous) {
       actor.displayName = 'anonymous';
       actor.avatarUrl = '';
     }
@@ -63,18 +57,18 @@ class NotifBuilder {
     const avatarLink = actor.avatarUrl && _isSafeUrl(actor.avatarUrl) ? actor.avatarUrl : '';
     const notification = new Notification(`New Noterook notification on ${ownerBlog}`, { body: bodyText, icon: avatarLink, data: notif });
     const link = window.location.origin + this.getLink(notif);
-    notification.onclick = () => browser.runtime.sendMessage(
-      {
-        type: 'open_url',
-        url: link
-      }
-    );
+    notification.onclick = () => browser.runtime.sendMessage({
+      type: 'open_url',
+      url: link
+    });
     return notification;
   }
 }
 
 const notificationHandlers = {
-  'followed': new (class extends NotifBuilder {
+  followed: new (class extends NotifBuilder {
+    bodyTextTemplate = '{0} followed you';
+
     getActor(notif) {
       return {
         username: notif.username,
@@ -85,11 +79,10 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.bookUrl, encodeURIComponent(this.getActor(notif).username));
     }
-    get bodyTextTemplate() {
-      return '{0} followed you';
-    }
   }),
-  'new_post': new (class extends NotifBuilder {
+  new_post: new (class extends NotifBuilder {
+    bodyTextTemplate = '{0} posted';
+
     getActor(notif) {
       return {
         username: notif.author,
@@ -100,9 +93,7 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
     }
-    get bodyTextTemplate() {
-      return '{0} posted';
-    }
+
     buildNotification(notif) {
       if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())) {
         return null;
@@ -110,7 +101,9 @@ const notificationHandlers = {
       return super.buildNotification(notif);
     }
   }),
-  'new_addition': new (class extends NotifBuilder { // Adding to someone else's post
+  new_addition: new (class extends NotifBuilder { // Adding to someone else's post
+    bodyTextTemplate = '{0} added to a post';
+
     getActor(notif) {
       const addition = notif.additions.find(addition => addition.post_id === notif.post_id);
       return {
@@ -121,9 +114,7 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
     }
-    get bodyTextTemplate() {
-      return '{0} added to a post';
-    }
+
     buildNotification(notif) {
       if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())) {
         return null;
@@ -131,7 +122,9 @@ const notificationHandlers = {
       return super.buildNotification(notif);
     }
   }),
-  'new_staple': new (class extends NotifBuilder {
+  new_staple: new (class extends NotifBuilder {
+    bodyTextTemplate = '{0} stapled a post';
+
     getActor(notif) {
       return {
         username: notif.author
@@ -140,9 +133,7 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
     }
-    get bodyTextTemplate() {
-      return '{0} stapled a post';
-    }
+
     buildNotification(notif) {
       if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())) {
         return null;
@@ -150,7 +141,9 @@ const notificationHandlers = {
       return super.buildNotification(notif);
     }
   }),
-  'post_stapled': new (class extends NotifBuilder { // stapling or adding to your post
+  post_stapled: new (class extends NotifBuilder { // stapling or adding to your post
+    bodyTextTemplate = '{0} {1} your post';
+
     getActor(notif) {
       return {
         username: notif.stapler,
@@ -161,14 +154,13 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.own_post_id || notif.post_id));
     }
-    get bodyTextTemplate() {
-      return '{0} {1} your post';
-    }
     getDetails(notif) {
       return [notif.has_addition ? 'added to' : 'stapled'];
     }
   }),
-  'addition_stapled': new (class extends NotifBuilder {
+  addition_stapled: new (class extends NotifBuilder {
+    bodyTextTemplate = '{0} {1} a post you added to';
+
     getActor(notif) {
       return {
         username: notif.stapler,
@@ -179,14 +171,13 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.own_post_id || notif.post_id));
     }
-    get bodyTextTemplate() {
-      return '{0} {1} a post you added to';
-    }
     getDetails(notif) {
       return [notif.has_addition ? 'added to' : 'stapled'];
     }
   }),
-  'post_stickered': new (class extends NotifBuilder {
+  post_stickered: new (class extends NotifBuilder {
+    bodyTextTemplate = '{0} reacted {1} to your post';
+
     getActor(notif) {
       return {
         username: notif.sticker_by,
@@ -198,14 +189,13 @@ const notificationHandlers = {
       const rootId = String(notif.post_id).split(':', 1)[0];
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(rootId));
     }
-    get bodyTextTemplate() {
-      return '{0} reacted {1} to your post';
-    }
     getDetails(notif) {
       return [notif.emoji || ''];
     }
   }),
-  'post_replied': new (class extends NotifBuilder {
+  post_replied: new (class extends NotifBuilder {
+    bodyTextTemplate = '{0} replied to your post';
+
     getActor(notif) {
       return {
         username: notif.reply_by,
@@ -216,11 +206,10 @@ const notificationHandlers = {
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
     }
-    get bodyTextTemplate() {
-      return '{0} replied to your post';
-    }
   }),
-  'new_ask': new (class extends NotifBuilder {
+  new_ask: new (class extends NotifBuilder {
+    bodyTextTemplate = '{0} {1}';
+
     getActor(notif) {
       return {
         username: notif.sender,
@@ -231,14 +220,13 @@ const notificationHandlers = {
     getLink(notif) {
       return NotifBuilder.inboxUrl;
     }
-    get bodyTextTemplate() {
-      return '{0} {1}';
-    }
     getDetails(notif) {
       return [notif.from_staff ? 'sent you a staff message' : 'asked you something'];
     }
   }),
-  'ask_answered': new (class extends NotifBuilder {
+  ask_answered: new (class extends NotifBuilder {
+    bodyTextTemplate = '{0} answered your ask';
+
     getActor(notif) {
       return {
         username: notif.answerer,
@@ -248,9 +236,6 @@ const notificationHandlers = {
     }
     getLink(notif) {
       return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.answer_post_id));
-    }
-    get bodyTextTemplate() {
-      return '{0} answered your ask';
     }
   })
 };
@@ -297,8 +282,8 @@ function _isSafeUrl(url) {
   }
 }
 
-function _parseFollowedUsers(str){
-  return str.toLowerCase().split('\n').map(item => item.trim()).filter(item=> item.length > 0);
+function _parseFollowedUsers(str) {
+  return str.toLowerCase().split('\n').map(item => item.trim()).filter(item => item.length > 0);
 }
 
 function _onNotification(e) {
@@ -317,12 +302,8 @@ function _run() {
     _channel = new BroadcastChannel('nr_tab_sync');
     _channel.onmessage = message => {
       const data = message.data;
-      if (!data || !data.type) {
-        return;
-      }
-      if (data.type === 'sse_event' && _targetEvents.includes(data.eventName)) {
-        _onNotification(data);
-      }
+      if (!data || !data.type) return;
+      if (data.type === 'sse_event' && _targetEvents.includes(data.eventName)) _onNotification(data);
     };
   }
 }
@@ -330,7 +311,7 @@ function _run() {
 export const update = async options => {
   const { followedUsers: followedUsersRaw } = options;
   followedUsers = _parseFollowedUsers(followedUsersRaw);
-}
+};
 
 export const main = async () => {
   const { followedUsers: followedUsersRaw } = await getOptions('notifications');
@@ -353,7 +334,7 @@ export const main = async () => {
 };
 
 export const clean = async () => {
-  if(_channel){
+  if (_channel) {
     _channel.close();
     _channel = null;
   }

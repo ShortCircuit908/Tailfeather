@@ -164,4 +164,4 @@ export const hasMouse = () => matchMedia('(pointer:fine)').matches; // (any-hove
 
 export const formatString = (template, ...args) => {
   return template.replace(/{([0-9]+)}/g, (match, index) => typeof args[index] === 'undefined' ? match : args[index]);
-}
+};
