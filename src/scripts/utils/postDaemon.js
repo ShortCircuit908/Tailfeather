@@ -12,6 +12,7 @@ const BlobManager = await NR.BlobManager();
 
 const FETCH_CONCURRENCY = 12;
 
+const _inFlight = new Map();
 const _readBefore = new Set();
 
 /**
@@ -21,13 +22,16 @@ const _readBefore = new Set();
  * to finish - matters a lot when one user's blob fetch takes ~4s and
  * nineteen others finish in 200ms.
  */
-async function _pMap(items, worker) {
+async function _pfMap(items, worker) {
   const results = new Array(items.length);
-  let idx = 0;
+  let nextIdx = 0;
   async function runner() {
-    while (idx < items.length) {
-      results[idx] = await worker(items[idx], idx);
-      ++idx;
+    while (true) {
+      const idx = nextIdx++;
+      if (idx >= items.length) return;
+      if (!_inFlight.has(items[idx])) _inFlight.set(items[idx], worker(items[idx], idx));
+      results[idx] = await _inFlight.get(items[idx]);
+      _inFlight.delete(items[idx]);
     }
   }
   const runners = Array.from(
@@ -40,15 +44,16 @@ async function _pMap(items, worker) {
 
 /**
  * Extracts unique shallow user data from fragments, prioritising data from newer fragments
- * @param {Map<string, object>} roots - deduplicated root fragments
- * @param {Map<string, object>} chainTips - deduplicated chain tip fragments
+ * @param {object[]} roots
+ * @param {object[]} chainTips
  * @returns {object[]} unique array of shallow user data
  */
 function _usersFromFragments(roots, chainTips) {
+  const rootMap = new Map(roots.map(r => [r.post_id, r]));
   const shallowUsersFiltered = new Map();
 
   chainTips.forEach(({ root_post_id, updated_at }) => {
-    const root = roots.get(root_post_id);
+    const root = rootMap.get(root_post_id);
     if (!root) return;
 
     const { author, author_name, author_avatar } = root;
@@ -78,17 +83,20 @@ function _unwrapBlob({ envelope: { author, root_fragments, addition_fragments, c
 /**
  * fetches (and caches) blobs from an array of users
  * @param {string[]} usernames 
- * @returns {object} amalgamated blob data
+ * @returns {object} user blobs
  */
 async function _fetchUserBlobs(usernames) {
-  const userBlobs = await _pMap(usernames, BlobManager.fetchBlobCached);
-  const blobFragments = userBlobs.filter((blob, i) => {
+  const userBlobs = await _pfMap(usernames, BlobManager.fetchBlobCached);
+  return userBlobs.filter((blob, i) => {
     if (!blob || blob.error) {
       console.warn(`[Solidifer] Failed to obtain blob for ${usernames[i]}`, blob);
       return false;
-    } else if (_readBefore.has(blob.envelope.author) && blob.method === 'cache-hit') return false; // Blob is up-to-date and we've read it before
-    else return true;
-  }).map(_unwrapBlob);
+    } else return true
+  });
+}
+
+function _flattenBlobSet(userBlobs) {
+  const blobFragments = userBlobs.map(_unwrapBlob);
   const rootFragments = new Map(), additionFragments = new Map(), chainTips = new Map();
 
   blobFragments.forEach(({ root_fragments, addition_fragments, chain_tips }) => {
@@ -97,45 +105,10 @@ async function _fetchUserBlobs(usernames) {
     chain_tips?.forEach(tip => chainTips.set(tip.post_id, tip));
   });
 
-  const errs = [];
-
-  updateData({
-    rootStore: [...rootFragments.values()].filter(root => {
-      if (root.post_id && root.created_at && root.author && root.tags) return true;
-      else {
-        errs.push(root);
-        return false
-      }
-    }),
-    additionStore: [...additionFragments.values()].filter(addition => {
-      if (addition.addition_id && addition.post_id && addition.created_at && addition.author && addition.tags) return true;
-      else {
-        errs.push(addition);
-        return false
-      }
-    }),
-    tipStore: [...chainTips.values()].filter(tip => {
-      if (tip.post_id && tip._blob_owner && tip.root_post_id) return true;
-      else {
-        errs.push(tip);
-        return false
-      }
-    }),
-    userStore: _usersFromFragments(rootFragments, chainTips).filter(user => {
-      if (user.username && user.display_name) return true;
-      else {
-        errs.push(user);
-        return false;
-      }
-    })
-  });
-
-  if (errs.length) console.warn(`[PostDaemon] Accumulated malformed data:`, errs);
-
   return {
-    rootFragments: [...rootFragments.values()],
-    additionFragments: [...additionFragments.values()],
-    chainTips: [...chainTips.values()]
+    rootFragments: [...rootFragments.values()].filter(root => root.post_id && root.created_at && root.author && root.tags),
+    additionFragments: [...additionFragments.values()].filter(addition => addition.addition_id && addition.post_id && addition.created_at && addition.author && addition.tags),
+    chainTips: [...chainTips.values()].filter(tip => tip.post_id && tip._blob_owner && tip.root_post_id)
   };
 }
 
@@ -190,14 +163,38 @@ export function getPostShallow(article) {
   return _thrallCache.get(article);
 }
 
+const cacheIndices = [new Set(), new Set(), new Set(), new Set()];
+
 /**
  * Serves the dual purpose of automatically populating `_thrallCache` on mutuation and caching data from user blobs based on what the user is viewing.
  * @param {HTMLElement[]} articles - Post article elements
  */
 export async function cacheFromDOM(articles) {
   const shallowData = articles.map(getPostShallow);
-  const usernames = uniqueDefined(shallowData.flatMap(({ author, originalAuthor, chain }) => [author, originalAuthor, ...chain.map(({ author: chainAuthor }) => chainAuthor)]));
-  _fetchUserBlobs(usernames);
+  const usernames = uniqueDefined(shallowData.flatMap(({ author, originalAuthor, chain }) => [author, originalAuthor, ...chain.map(({ author: chainAuthor }) => chainAuthor)])).filter(user => !_inFlight.has(user));
+  const userBlobs = await _fetchUserBlobs(usernames);
+
+  const fragments = _flattenBlobSet(userBlobs.filter(blob => {
+    if (_readBefore.has(blob.envelope.author) && blob.method === 'cache-hit') return false; // Blob is up-to-date and we've read it before
+    return true;
+  }));
+
+  const [rootStore, additionStore, tipStore] = [fragments.rootFragments, fragments.additionFragments, fragments.chainTips].map((fragmentCollection, i) => fragmentCollection.filter(({ post_id }) => {
+    if (cacheIndices[i].has(post_id)) return false;
+    cacheIndices[i].add(post_id);
+    return true;
+  }));
+
+  return updateData({
+    rootStore,
+    additionStore,
+    tipStore,
+    userStore: _usersFromFragments(fragments.rootFragments, fragments.chainTips).filter(user => {
+      if (!user.username || !user.display_name || cacheIndices[3].has(user.username)) return false;
+      cacheIndices[3].add(user.username);
+      return true;
+    })
+  });
 }
 
 // =========================================================================
@@ -547,7 +544,7 @@ export async function getPosts(articles) {
       }
     });
 
-    const { rootFragments, additionFragments, chainTips } = await _fetchUserBlobs([...missedUsers.values()]);
+    const { rootFragments, additionFragments, chainTips } = await _fetchUserBlobs([...missedUsers.values()]).then(_flattenBlobSet);
     _mapChainTipsToDisplayObjectEntries(rootFragments, additionFragments, chainTips).forEach(post => indexedPosts[post.post_id] = post);
   }
 
