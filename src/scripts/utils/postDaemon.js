@@ -26,10 +26,8 @@ async function _pfMap(items, worker) {
   const results = new Array(items.length);
   let nextIdx = 0;
   async function runner() {
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+    while (nextIdx < items.length) {
       const idx = nextIdx++;
-      if (idx >= items.length) return;
       if (!_inFlight.has(items[idx])) _inFlight.set(items[idx], worker(items[idx], idx));
       results[idx] = await _inFlight.get(items[idx]);
       _inFlight.delete(items[idx]);
