@@ -1,9 +1,274 @@
-import { getStorage } from './utils/jsTools.js';
+import { getOptions, getStorage, formatString } from './utils/jsTools.js';
 import { noact } from './utils/noact.js';
 import { isBlockedUser } from './utils/blockManager.js';
 import { activeSlug } from './utils/activeBlogs.js';
 
+class NotifBuilder {
+  static postUrl = "/book/{0}/?post={1}";
+  static bookUrl = "/book/{0}/";
+  static inboxUrl = "/inbox/";
+  
+  /**
+   * Collect actor information into a uniform structure
+   *
+   * @param {object} notif
+   * @returns {{
+   *   username: string,
+   *   displayName: string,
+   *   avatarUrl: string
+   * }}
+   */
+  getActor(notif) {}
+  
+  /**
+   * Get additional parameters for use in {@link bodyTextTemplate}
+   *
+   * @param {object} notif
+   * @return {string[]}
+   */
+  getDetails(notif) {}
+  
+  /**
+   * Get a path to the post referred to by the notification
+   *
+   * @param {object} notif
+   * @return {string}
+   */
+  getLink(notif) {}
+  
+  /**
+   * Get a string template for the notification's text body
+   * Placeholders are numbered in braces, e.g. {0} {1} {2} etc...
+   *
+   * @return {string}
+   */
+  get bodyTextTemplate() {}
+  
+  /**
+   * Assemble Noterook notification events into push notifications
+   *
+   * @param {object} notif
+   * @returns {Notification}
+   */
+  buildNotification(notif) {
+    const actor = this.getActor(notif);
+    if(notif.is_anonymous){
+      actor.displayName = 'anonymous';
+      actor.avatarUrl = '';
+    }
+    const ownerBlog = notif.recipient || activeSlug;
+    const actorName = actor.displayName || actor.username;
+    const format = this.bodyTextTemplate || ('{} ' + notif.type);
+    const bodyText = formatString(format, actorName, ...(this.getDetails(notif) || []));
+    const avatarLink = actor.avatarUrl && _isSafeUrl(actor.avatarUrl) ? actor.avatarUrl : '';
+    const notification = new Notification(`New Noterook notification on ${ownerBlog}`, { body: bodyText, icon: avatarLink, data: notif });
+    const link = window.location.origin + this.getLink(notif);
+    notification.onclick = () => browser.runtime.sendMessage(
+      {
+        type: 'open_url',
+        url: link
+      }
+    );
+    return notification;
+  }
+}
+
+const notificationHandlers = {
+  'followed': new (class extends NotifBuilder {
+    getActor(notif) {
+      return {
+        username: notif.username,
+        displayName: notif.display_name,
+        avatarUrl: notif.avatar_url
+      };
+    }
+    getLink(notif) {
+      return formatString(NotifBuilder.bookUrl, encodeURIComponent(this.getActor(notif).username));
+    }
+    get bodyTextTemplate() {
+      return '{0} followed you';
+    }
+  }),
+  'new_post': new (class extends NotifBuilder {
+    getActor(notif) {
+      return {
+        username: notif.author,
+        displayName: notif.author_name,
+        avatarUrl: notif.author_avatar
+      };
+    }
+    getLink(notif) {
+      return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
+    }
+    get bodyTextTemplate() {
+      return '{0} posted';
+    }
+    buildNotification(notif) {
+      if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())) {
+        return null;
+      }
+      return super.buildNotification(notif);
+    }
+  }),
+  'new_addition': new (class extends NotifBuilder { // Adding to someone else's post
+    getActor(notif) {
+      const addition = notif.additions.find(addition => addition.post_id === notif.post_id);
+      return {
+        username: addition.author,
+        displayName: addition.author_name
+      };
+    }
+    getLink(notif) {
+      return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
+    }
+    get bodyTextTemplate() {
+      return '{0} added to a post';
+    }
+    buildNotification(notif) {
+      if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())) {
+        return null;
+      }
+      return super.buildNotification(notif);
+    }
+  }),
+  'new_staple': new (class extends NotifBuilder {
+    getActor(notif) {
+      return {
+        username: notif.author
+      };
+    }
+    getLink(notif) {
+      return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
+    }
+    get bodyTextTemplate() {
+      return '{0} stapled a post';
+    }
+    buildNotification(notif) {
+      if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())) {
+        return null;
+      }
+      return super.buildNotification(notif);
+    }
+  }),
+  'post_stapled': new (class extends NotifBuilder { // stapling or adding to your post
+    getActor(notif) {
+      return {
+        username: notif.stapler,
+        displayName: notif.stapler_name,
+        avatarUrl: notif.stapler_avatar
+      };
+    }
+    getLink(notif) {
+      return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.own_post_id || notif.post_id));
+    }
+    get bodyTextTemplate() {
+      return '{0} {1} your post';
+    }
+    getDetails(notif) {
+      return [notif.has_addition ? 'added to' : 'stapled'];
+    }
+  }),
+  'addition_stapled': new (class extends NotifBuilder {
+    getActor(notif) {
+      return {
+        username: notif.stapler,
+        displayName: notif.stapler_name,
+        avatarUrl: notif.stapler_avatar
+      };
+    }
+    getLink(notif) {
+      return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.own_post_id || notif.post_id));
+    }
+    get bodyTextTemplate() {
+      return '{0} {1} a post you added to';
+    }
+    getDetails(notif) {
+      return [notif.has_addition ? 'added to' : 'stapled'];
+    }
+  }),
+  'post_stickered': new (class extends NotifBuilder {
+    getActor(notif) {
+      return {
+        username: notif.sticker_by,
+        displayName: notif.sticker_by_name,
+        avatarUrl: notif.sticker_by_avatar
+      };
+    }
+    getLink(notif) {
+      const rootId = String(notif.post_id).split(':', 1)[0];
+      return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(rootId));
+    }
+    get bodyTextTemplate() {
+      return '{0} reacted {1} to your post';
+    }
+    getDetails(notif) {
+      return [notif.emoji || ''];
+    }
+  }),
+  'post_replied': new (class extends NotifBuilder {
+    getActor(notif) {
+      return {
+        username: notif.reply_by,
+        displayName: notif.reply_by_name,
+        avatarUrl: notif.reply_by_avatar
+      };
+    }
+    getLink(notif) {
+      return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
+    }
+    get bodyTextTemplate() {
+      return '{0} replied to your post';
+    }
+  }),
+  'new_ask': new (class extends NotifBuilder {
+    getActor(notif) {
+      return {
+        username: notif.sender,
+        displayName: notif.sender_name,
+        avatarUrl: notif.sender_avatar
+      };
+    }
+    getLink(notif) {
+      return NotifBuilder.inboxUrl;
+    }
+    get bodyTextTemplate() {
+      return '{0} {1}';
+    }
+    getDetails(notif) {
+      return [notif.from_staff ? 'sent you a staff message' : 'asked you something'];
+    }
+  }),
+  'ask_answered': new (class extends NotifBuilder {
+    getActor(notif) {
+      return {
+        username: notif.answerer,
+        displayName: notif.answerer_name,
+        avatarUrl: notif.answerer_avatar
+      };
+    }
+    getLink(notif) {
+      return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.answer_post_id));
+    }
+    get bodyTextTemplate() {
+      return '{0} answered your ask';
+    }
+  })
+};
+
+const _targetEvents = [
+  'nr:followed',
+  'nr:new_post',
+  'nr:new_addition',
+  'nr:new_staple',
+  'nr:post_stapled',
+  'nr:post_stickered',
+  'nr:post_replied',
+  'nr:new_ask'
+];
 let _requestInProgress = false;
+let _channel;
+
+let followedUsers;
 
 async function _cancel() {
   return getStorage(['preferences']).then(async ({ preferences }) => {
@@ -32,101 +297,44 @@ function _isSafeUrl(url) {
   }
 }
 
-/**
- * constructs a notification.
- *
- * @param {object} notif - Notification payload (from Redis ZSET via
- *   /api/v1/notifications/since/).
- * @param {object} [opts]
- * @param {string} [opts.selfUsername] - Legacy fallback for the
- *   recipient blog. Modern payloads carry `recipient` (set by
- *   push_notification on the server), which is the authoritative
- *   post-owning blog for staple / sticker notifications. Pass the
- *   currently-active blog so old payloads buffered before the
- *   recipient field rolled out still resolve to a sensible URL.
- * @returns {Notification}
- */
-function _buildNotificationItem(notif, opts = {}) {
-  const { selfUsername = '' } = opts;
-
-  // The recipient blog (i.e. who the notification was pushed TO)
-  // is the post-owning blog for staple / sticker notifications -
-  // those events are always addressed to the post's author. Prefer
-  // it over the active-blog fallback so switching sideblogs after
-  // a notification lands doesn't reroute its post URL to the wrong
-  // book and 404 (Sel's report).
-  const ownerBlog = notif.recipient || selfUsername;
-
-  const actor = notif.username || notif.stapler || notif.sticker_by
-    || notif.sender || notif.answerer || '';
-  // Anonymity scrub for asks AND stickers. The server omits the
-  // placer / sender handle when is_anonymous is set (see
-  // api/stickers.py place_sticker + agree_sticker, api/asks.py);
-  // the client must match so display names, avatars, and profile
-  // links never leak the real identity.
-  const isAnonAsk = notif.type === 'new_ask' && notif.is_anonymous;
-  const isAnonSticker = notif.type === 'post_stickered' && notif.is_anonymous;
-  const isAnon = isAnonAsk || isAnonSticker;
-  const actorName = isAnon
-    ? 'anonymous'
-    : (notif.display_name || notif.stapler_name || notif.sticker_by_name
-      || notif.sender_name || notif.answerer_name || actor || 'someone');
-  const avatarUrl = isAnon
-    ? ''
-    : (notif.avatar_url || notif.stapler_avatar || notif.sticker_by_avatar
-      || notif.sender_avatar || notif.answerer_avatar || '');
-
-  let bodyText = '';
-  if (notif.type === 'followed') {
-    bodyText = 'followed you';
-  } else if (notif.type === 'post_stapled') {
-    const verb = notif.has_addition ? 'added to' : 'stapled';
-    bodyText = `${verb} your post`;
-  } else if (notif.type === 'addition_stapled') {
-    // Your addition traveled along with a staple of someone else's
-    // root. If the stapler also added their own commentary in the
-    // process, the user-visible action they took was really "added
-    // to" (not just a bare staple); say that.
-    bodyText = notif.has_addition
-      ? 'added to a post you added to'
-      : 'stapled a post you added to';
-  } else if (notif.type === 'post_stickered') {
-    bodyText = `reacted ${notif.emoji || ''} to your post`;
-  } else if (notif.type === 'new_ask') {
-    bodyText = notif.from_staff ? 'sent you a staff message' : 'asked you something';
-  } else if (notif.type === 'ask_answered') {
-    bodyText = 'answered your ask';
-  } else {
-    bodyText = notif.type;
-  }
-
-  const avatarLink = avatarUrl && _isSafeUrl(avatarUrl) ? avatarUrl : '';
-
-  const notificationObj = new Notification(`New Noterook notification on ${ownerBlog}`, { body: `${actorName} ${bodyText}`, icon: avatarLink, data: notif });
-  return notificationObj;
+function _parseFollowedUsers(str){
+  return str.toLowerCase().split('\n').map(item => item.trim()).filter(item=> item.length > 0);
 }
 
 function _onNotification(e) {
   const detail = e.detail || {};
-  if (!detail.type) return;
+  const builder = notificationHandlers[detail.type];
 
-  const actor = detail.username || detail.stapler || detail.sticker_by || '';
-  if (isBlockedUser(actor)) return; // Simple check
+  if (!detail.type || !builder) return;
 
-  const displayName = detail.display_name || detail.stapler_name || detail.sticker_by_name || actor;
-  const icon = detail.avatar_url || detail.stapler_avatar || detail.stickered_by_avatar || '';
-
-  const notif = _buildNotificationItem(detail, { selfUsername: activeSlug });
+  const actor = builder.getActor(detail);
+  if (isBlockedUser(actor.username)) return; // Simple check
+  const notif = builder.buildNotification(detail);
 }
 
 function _run() {
-  document.addEventListener('nr:post_stapled', _onNotification);
-  document.addEventListener('nr:post_stickered', _onNotification);
-  document.addEventListener('nr:followed', _onNotification);
-  document.addEventListener('nr:new_ask', _onNotification);
+  if (!_channel) {
+    _channel = new BroadcastChannel('nr_tab_sync');
+    _channel.onmessage = message => {
+      const data = message.data;
+      if (!data || !data.type) {
+        return;
+      }
+      if (data.type === 'sse_event' && _targetEvents.includes(data.eventName)) {
+        _onNotification(data);
+      }
+    };
+  }
+}
+
+export const update = async options => {
+  const { followedUsers: followedUsersRaw } = options;
+  followedUsers = _parseFollowedUsers(followedUsersRaw);
 }
 
 export const main = async () => {
+  const { followedUsers: followedUsersRaw } = await getOptions('notifications');
+  followedUsers = _parseFollowedUsers(followedUsersRaw);
   if (Notification.permission === 'denied') {
     await _cancel();
     return;
@@ -143,4 +351,10 @@ export const main = async () => {
     }))
   } else _run();
 };
-export const clean = async () => { };
+
+export const clean = async () => {
+  if(_channel){
+    _channel.close();
+    _channel = null;
+  }
+};

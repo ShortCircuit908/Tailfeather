@@ -3,7 +3,17 @@
   "title": "Push Notifications",
   "description": "Echoes new notifications to your device's push notifications when Noterook is open in the background.",
   "preferences": {
-    "enabled": false
+    "enabled": false,
+    "options": {
+      "followedUsers": {
+        "value": "",
+        "name": "Followed users",
+        "type": "text",
+        "textarea": true,
+        "tooltip": "List of users (one per line, case-insensitive) you will receive additional notifications from.",
+        "placeholder": "Usernames (one per line)"
+      }
+    }
   },
   "js": true,
   "css": true
