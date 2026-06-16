@@ -458,10 +458,12 @@ function _createDisplayObject(rootFragment, additionFragments, chainTip) {
  * @returns {object[]} display objects
  */
 function _mapChainTipsToDisplayObjectEntries(rootFragments, additionFragments, chainTips) {
+  const rootMap = new Map(rootFragments.map(r => [r.post_id, r]));
+  const additionMap = new Map(additionFragments.map(a => [a.addition_id, a]));
   const posts = new Map();
 
   chainTips.forEach(chainTip => {
-    const rootFragment = rootFragments.find(({ post_id }) => post_id === chainTip.root_post_id);
+    const rootFragment = rootMap.get(chainTip.root_post_id);
     if (!rootFragment) {
       console.warn('[PostDaemon] Failed to obtain root fragment for chain tip', chainTip);
       return;
@@ -470,7 +472,7 @@ function _mapChainTipsToDisplayObjectEntries(rootFragments, additionFragments, c
     let chainAdditionFragments = [];
 
     if (chainTip.chain.length) {
-      chainAdditionFragments = defined(additionFragments.filter(({ addition_id }) => chainTip.chain.includes(addition_id)));
+      chainAdditionFragments = defined(chainTip.chain.map(additionId => additionMap.get(additionId)));
       if (chainTip.chain.length !== chainAdditionFragments.length) {
         console.warn('[PostDaemon] Failed to obtain all additions for chain tip', chainTip);
         return;
@@ -503,7 +505,7 @@ export async function getIndexedPosts(postIds) {
       misformed.tipStore.push(tip.post_id);
       return false;
     } else return true;
-  })
+  });
 
   chainTips.forEach(({ root_post_id, chain }) => {
     rootIds.push(root_post_id);
