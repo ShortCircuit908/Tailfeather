@@ -1,4 +1,4 @@
-import { getOptions, getStorage, formatString } from './utils/jsTools.js';
+import { getOptions, getStorage, formatString, deepEquals } from './utils/jsTools.js';
 import { noact } from './utils/noact.js';
 import { isBlockedUser } from './utils/blockManager.js';
 import { activeSlug } from './utils/activeBlogs.js';
@@ -24,7 +24,7 @@ class NotifBuilder {
    * Get additional parameters for use in {@link bodyTextTemplate}
    *
    * @param {object} notif
-   * @return {string[]}
+   * @return {string|string[]}
    */
   getDetails(notif) {}
   
@@ -61,7 +61,7 @@ class NotifBuilder {
     const format = this.bodyTextTemplate || ('{} ' + notif.type);
     const bodyText = formatString(format, actorName, ...(this.getDetails(notif) || []));
     const avatarLink = actor.avatarUrl && _isSafeUrl(actor.avatarUrl) ? actor.avatarUrl : '';
-    const notification = new Notification(`New Noterook notification on ${ownerBlog}`, { body: bodyText, icon: avatarLink, data: notif });
+    const notification = new Notification(`New Noterook notification on ${ownerBlog}`, { body: bodyText, icon: avatarLink, data: notif});
     const link = window.location.origin + this.getLink(notif);
     notification.onclick = () => browser.runtime.sendMessage(
       {
@@ -267,6 +267,8 @@ const _targetEvents = [
 ];
 let _requestInProgress = false;
 let _channel;
+const _eventBufferSize = 5;
+const _eventBuffer = [];
 
 let followedUsers;
 
@@ -297,6 +299,17 @@ function _isSafeUrl(url) {
   }
 }
 
+function _dedupeNotificationEvent(event){
+  if (_eventBuffer.find(value => value.username === event.username && value.timestamp === event.timestamp) !== undefined) {
+    return true;
+  }
+  if (_eventBuffer.length >= _eventBufferSize) {
+    _eventBuffer.pop();
+  }
+  _eventBuffer.push(event);
+  return false;
+}
+
 function _parseFollowedUsers(str){
   return str.toLowerCase().split('\n').map(item => item.trim()).filter(item=> item.length > 0);
 }
@@ -307,6 +320,17 @@ function _onNotification(e) {
 
   if (!detail.type || !builder) return;
 
+  // Maintain a buffer of recent events to prevent duplicate notifications
+  // Selection of attributes to use as a unique identifier is paramount
+  // In this case, it is assumed that a user cannot generate multiple events in the same millisecond
+  const eventIdentifier = {
+    actor: builder.getActor(detail).username,
+    timestamp: detail._ts
+  }
+  if (_dedupeNotificationEvent(eventIdentifier)) {
+    return;
+  }
+  
   const actor = builder.getActor(detail);
   if (isBlockedUser(actor.username)) return; // Simple check
   const notif = builder.buildNotification(detail);
@@ -315,6 +339,7 @@ function _onNotification(e) {
 function _run() {
   if (!_channel) {
     _channel = new BroadcastChannel('nr_tab_sync');
+    console.debug('[Notifications] Opened SSE channel');
     _channel.onmessage = message => {
       const data = message.data;
       if (!data || !data.type) {
@@ -356,5 +381,6 @@ export const clean = async () => {
   if(_channel){
     _channel.close();
     _channel = null;
+    console.debug('[Notifications] Closed SSE channel');
   }
 };
