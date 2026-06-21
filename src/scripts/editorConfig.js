@@ -156,9 +156,9 @@ function loadDraft(draft) {
 
   const styleContents = [];
   const body = draft.body.replace(styleRegex, (_, s) => {
-    styleContents.push(s);
+    styleContents.push(s.trim());
     return '';
-  });
+  }).trim();
 
   editor.session.setValue(body);
   if (styleContents.length) cssEditor.session.setValue(styleContents.join('\n'));
@@ -240,7 +240,7 @@ function initEditor({ blog, userBlogs, defaultContent: _content, defaultCss: _cs
     keyboardHandler: `ace/keyboard/${keybinding}`
   });
 
-  const cssEditor = ace.edit('css-composer', {
+  cssEditor = ace.edit('css-composer', {
     mode: 'ace/mode/css',
     value: defaultCss,
     wrap: 'free',
