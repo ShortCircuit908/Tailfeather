@@ -559,7 +559,7 @@
           if (areaName !== 'local' || typeof preferences === 'undefined') return;
 
           const newPref = preferences.newValue.themes;
-          const changed = Object.keys(preferences.newValue).filter(key => !deepEquals(preferences?.newValue[key], preferences?.oldValue[key]));
+          const changed = Object.keys(preferences.newValue).filter(key => !deepEquals(preferences?.newValue[key], preferences?.oldValue ? preferences?.oldValue[key] : undefined));
 
           if (changed.includes('themes') && newPref.enabled) Themes.update(newPref.options);
           else if (!newPref.enabled) Themes.clean();
