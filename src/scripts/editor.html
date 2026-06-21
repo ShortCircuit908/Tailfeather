@@ -43,8 +43,55 @@
             <input type="checkbox" id="ask-anonymous" />
             Send anonymously
           </label>
+          <label
+            class="composer-checkbox-label"
+            title="Publish at a future time. The post stays hidden from everyone but you until then, then appears on its own. (Needs your blob to stay alive until then - don't schedule and go dark past your book's lifespan.)"
+            for="composer-schedule-toggle"
+          >
+            <input type="checkbox" id="composer-schedule-toggle" />
+            Schedule
+          </label>
+          <input
+            type="datetime-local"
+            id="composer-schedule-at"
+            class="composer-schedule-input"
+            style="display: none"
+            title="When to publish"
+          />
+          <span
+            class="composer-schedule-hint"
+            id="composer-schedule-hint"
+            style="display: none"
+          ></span>
+          <div class="composer-char-count" id="composer-char-count">
+            0 / 100,000
+          </div>
         </div>
         <div class="composer-buttons">
+          <button
+            type="button"
+            id="composer-drafts-btn"
+            class="btn-secondary composer-btn"
+            title="Saved drafts (this device only)"
+          >
+            Drafts
+          </button>
+          <button
+            type="button"
+            id="composer-save-draft"
+            class="btn-secondary composer-btn"
+            title="Save as a local draft (not published)"
+          >
+            Save draft
+          </button>
+          <button
+            type="button"
+            id="composer-queue-btn"
+            class="btn-secondary composer-btn"
+            title="Add to your queue - publishes automatically at the next drip slot"
+          >
+            Queue
+          </button>
           <button
             type="button"
             id="composer-submit"
@@ -52,8 +99,14 @@
           >
             Post
           </button>
-          <div class="composer-char-count" id="composer-char-count">
-            0 / 100,000
+        </div>
+        <div
+          class="composer-drafts-panel"
+          id="composer-drafts-panel"
+          style="display: none"
+        >
+          <div class="composer-drafts-empty">
+            No saved drafts on this device.
           </div>
         </div>
       </footer>

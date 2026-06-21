@@ -1,10 +1,14 @@
 import { svgIcon } from './utils/icons.js';
 import { noact } from './utils/noact.js';
-import { getActiveBlog, listBlogs } from './utils/activeBlogs.js';
+import { getActiveBlog, listBlogs, userInfo } from './utils/activeBlogs.js';
 import { createPost, editCompositeRoot, editAddition } from './utils/composer.js';
 import { getOptions } from './utils/jsTools.js';
 import { mutationManager, postFunction } from './utils/mutation.js';
 import { getOwnPost, getPosts } from './utils/postDaemon.js';
+import NR from './utils/noterook.js';
+
+const Drafts = await NR.Drafts();
+const Queue = await NR.Queue();
 
 // activeBlog imports are resolved here and not editorConfig.js because the iframe context is separate from the main window, so they would fail in the config module
 
@@ -19,7 +23,7 @@ let defaultContent, defaultCss, theme, keybinding, nrTheme, trustedImageHosts, t
 
 const editMap = new Map();
 
-const listener = event => {
+async function listener(event) {
   if (event.origin + '/' !== uri) return;
   if (event.data === 'frameInit') {
     event.source.postMessage({
@@ -34,6 +38,20 @@ const listener = event => {
       trustedMediaHosts,
       trustedStylesheetHosts
     }, uri);
+  } else if (event.data === 'listDrafts') {
+    const drafts = await Drafts.listDrafts(userInfo.id);
+    event.source.postMessage({ drafts }, uri);
+  } else if (typeof event.data === 'object' && 'getDraft' in event.data) {
+    const loadDraft = (await Drafts.listDrafts(userInfo.id)).find((x) => x.id === event.data.getDraft);
+    event.source.postMessage({ loadDraft }, uri);
+  } else if (typeof event.data === 'object' && 'saveDraft' in event.data) {
+    await Drafts.saveDraft(userInfo.id, event.data.saveDraft);
+    const drafts = await Drafts.listDrafts(userInfo.id);
+    event.source.postMessage({ drafts }, uri);
+  } else if (typeof event.data === 'object' && 'deleteDraft' in event.data) {
+    await Drafts.deleteDraft(userInfo.id, event.data.deleteDraft);
+    const drafts = await Drafts.listDrafts(userInfo.id);
+    event.source.postMessage({ drafts }, uri);
   } else if (typeof event.data === 'object' && 'editingPostId' in event.data) {
     const postData = editMap.get(event.data.editingPostId);
     event.source.postMessage({
@@ -41,7 +59,7 @@ const listener = event => {
       userBlogs: null,
       defaultContent: postData.body,
       defaultCss,
-      defaultTags: postData.tags,
+      preappliedTags: postData.tags,
       theme,
       nrTheme,
       keybinding,
@@ -50,8 +68,28 @@ const listener = event => {
       trustedStylesheetHosts
     }, uri);
   } else if (typeof event.data === 'object' && 'composerContent' in event.data) {
-    const { composerContent, hideFromSearch, askAnon, tagString, qualifier, qualifierId, blog } = event.data;
-    if (qualifier === 'additionToPost') {
+    const { composerContent, hideFromSearch, scheduledAt, askAnon, tagString, qualifier, qualifierId, blog, queueing } = event.data;
+    if (queueing) {
+      try {
+        // [september] the following block is currently present in NR's queue handler, but does nothing, as the preference is never initialised nor configurable
+        // Per-device interval override (hours); the module default
+        // (6h) applies when unset/invalid.
+        let intervalMs;
+        /* const h = parseFloat(getDevicePref('queue_interval_hours'));
+        if (!isNaN(h) && h > 0) intervalMs = h * 60 * 60 * 1000; */
+
+        const slot = await Queue.nextQueueSlot(userInfo.id, intervalMs);
+        await createPost(composerContent, tagString, blog, {
+          hideFromSearch,
+          scheduledAt: slot.toISOString(),
+        });
+        alert(`Queued — publishes ${slot.toLocaleString()}`);
+        closeEditor({ type: 'click' });
+      } catch (err) {
+        console.error('[TF-Editor] Failed to queue post:', err, event.data);
+        alert('Could not queue: ' + err.message);
+      }
+    } else if (qualifier === 'additionToPost') {
       const form = document.querySelector(`article[data-post-id="${qualifierId}"] .inline-addition-form`);
       form.querySelector('.chain-addition-textarea').value = composerContent;
       form.querySelector('.inline-tags-input').value = tagString;
@@ -108,11 +146,11 @@ const listener = event => {
         window.alert('Failed to edit post!');
       });
     } else {
-      createPost(composerContent, tagString, blog, { hideFromSearch }).then(() => {
+      createPost(composerContent, tagString, blog, { hideFromSearch, scheduledAt }).then(() => {
         closeEditor({ type: 'click' });
-      }, e => {
-        console.error('[TF-Editor] Failed to create post:', e, event.data);
-        window.alert('Failed to create post!');
+      }, err => {
+        console.error('[TF-Editor] Failed to create post:', err, event.data);
+        alert('Failed to create post!');
       });
     }
   }
@@ -228,8 +266,6 @@ const newEditButton = fragment => noact({
     } else postData = { ...post, authorBlog };
     editMap.set(postData.post_id, postData);
 
-    console.log(postData)
-
     openEditorIFrame(`?editing${'addition_id' in fragment ? 'Addition' : 'Post'}=${fragment.post_id}`);
   },
   children: [
@@ -285,6 +321,8 @@ export const main = async () => {
   ({ theme: nrTheme, trustedImageHosts, trustedMediaHosts, trustedStylesheetHosts } = document.body.dataset);
 
   window.addEventListener('message', listener);
+
+  document.getElementById('tf-nav-new-post')?.remove();
   document.getElementById('nav-new-post').insertAdjacentElement('afterend', noact({
     id: 'tf-nav-new-post',
     className: 'btn-primary-sm',
@@ -292,9 +330,11 @@ export const main = async () => {
     onclick: onOpenEditor,
     children: svgIcon('commandline', 24, 24)
   }));
+
   mutationManager.start(chainAdditionFormSelector, addChainAdditionFormControls);
   mutationManager.start(answerFormSelector, addAnswerFormControls);
   mutationManager.start(askFormSelector, addAskFormControls);
+
   postFunction.start(addEditButtons, `:not([${customAttribute}])`);
 };
 

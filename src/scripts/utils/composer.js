@@ -109,7 +109,22 @@ export async function createPost(body, tagsInput, blog, options = {}) {
 
   const postId = options.postId || generatePostId();
   const tags = parseTags(tagsInput);
-  const createdAt = options.createdAt || new Date().toISOString();
+
+  // Scheduling: a future created_at makes this a scheduled post. The
+  // server gate (api/book.py) hides it from non-owners until then; the
+  // signature below is made now (with the acting blog's key) over that
+  // future timestamp, so it verifies when the post reveals. A past or
+  // invalid scheduledAt is ignored (posts now) so a bad value can't
+  // silently bury a post.
+  let createdAt = options.createdAt || new Date().toISOString();
+  let isScheduled = false;
+  if (options.scheduledAt) {
+    const when = new Date(options.scheduledAt);
+    if (!isNaN(when.getTime()) && when.getTime() > Date.now()) {
+      createdAt = when.toISOString();
+      isScheduled = true;
+    }
+  }
 
   // Unlike Noterook, we support posting from non-active blogs
   // Opposite priority here: fallback to getActiveBlog()
@@ -194,13 +209,27 @@ export async function createPost(body, tagsInput, blog, options = {}) {
     tipStore: chain_tip
   });
 
-  // Register tags with server (non-blocking) - skip if hidden from search or editing an existing index
-  if (!(options.hideFromSearch || options.editing)) {
-    registerTags(postId, tags);
+  // Scheduled posts: record a pending reveal so revealDuePosts() can
+  // tag-register + relay them once their time arrives (the next time the
+  // author is online after that). Without this they'd surface via the
+  // blob/gate but stay permanently absent from tag search and never reach
+  // followers live.
+  if (isScheduled) {
+    try {
+      const pending = (await BookStore.getMetadata('scheduled_pending')) || [];
+      pending.push({ post_id: postId, created_at: createdAt, blog_slug: authorUsername });
+      await BookStore.setMetadata('scheduled_pending', pending);
+    } catch (err) {
+      console.warn('[TF-Composer] could not record scheduled reveal:', err);
+    }
   }
 
-  // Notify followers via SSE relay (non-blocking)
-  if (!(options.hideFromSearch || options.editing)) {
+  // skip if hidden from search, scheduling, or editing an existing index
+  if (!(options.hideFromSearch || options.editing || isScheduled)) {
+    // Register tags with server (non-blocking)
+    registerTags(postId, tags);
+
+    // Notify followers via SSE relay (non-blocking)
     sendPostEvent(post, 'new_post', authorUsername);
   }
 

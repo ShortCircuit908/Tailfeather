@@ -171,22 +171,6 @@ aside {
   gap: 0.75rem;
 }
 
-label[for="ask-anonymous"] {
-  display: none;
-}
-
-.tf-composer-controls--ask {
-
-  .composer-tags-input,
-  [for="composer-hide-search"] {
-    display: none;
-  }
-
-  [for="ask-anonymous"] {
-    display: block;
-  }
-}
-
 .composer-tags-input {
   flex: 1;
   background: var(--bg-input);
@@ -230,12 +214,54 @@ label[for="ask-anonymous"] {
   transition: background 0.15s;
 }
 
+#composer-submit {
+  margin-left: auto;
+}
+
 .composer-char-count {
   flex-grow: 1;
   font-size: 0.7rem;
   color: var(--text-dim);
   text-align: right;
   align-self: end;
+}
+
+#composer-drafts-panel {
+  max-height: 6rem;
+}
+
+.composer-draft-row {
+  height: 3rem;
+}
+
+label[for="ask-anonymous"],
+[for="composer-schedule-toggle"],
+#composer-drafts-btn,
+#composer-save-draft,
+#composer-queue-btn {
+  display: none;
+}
+
+.tf-composer-controls--composing {
+
+  [for="composer-schedule-toggle"],
+  #composer-drafts-btn,
+  #composer-save-draft,
+  #composer-queue-btn {
+    display: inherit;
+  }
+}
+
+.tf-composer-controls--ask {
+
+  .composer-tags-input,
+  [for="composer-hide-search"] {
+    display: none;
+  }
+
+  [for="ask-anonymous"] {
+    display: block;
+  }
 }
 
 .post-card {
