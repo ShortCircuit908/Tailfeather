@@ -8,10 +8,10 @@
       "followedUsers": {
         "value": "",
         "name": "Followed users",
-        "type": "text",
-        "textarea": true,
-        "tooltip": "List of users (one per line, case-insensitive) you will receive additional notifications from.",
-        "placeholder": "Usernames (one per line)"
+        "type": "listInput",
+        "tooltip": "List of users you will receive additional notifications from.",
+        "placeholder": "Username (case-insensitive)",
+        "options": ["dragongirlsnout", "ShortCircuit908"]
       }
     }
   },
