@@ -10,8 +10,7 @@
         "name": "Followed users",
         "type": "listInput",
         "tooltip": "List of users you will receive additional notifications from.",
-        "placeholder": "Username (case-insensitive)",
-        "options": ["dragongirlsnout", "ShortCircuit908"]
+        "placeholder": "Username (case-insensitive)"
       }
     }
   },
