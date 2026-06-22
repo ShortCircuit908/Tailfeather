@@ -804,8 +804,7 @@ select+.ui-tooltip {
 
 #ui-preferenceText {
   font-family: "Fira Code", "Courier New", Courier, monospace;
-  font-weight: bold;
-  height: calc(100vh - 293px);
+  height: calc(100vh - 279px);
   border: 1px solid var(--border);
 }
 
