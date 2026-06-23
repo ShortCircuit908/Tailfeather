@@ -444,6 +444,94 @@
                     ]
                   });
                   break;
+                } case 'listInput': {
+                  async function saveState() {
+                    const values = [...document.querySelectorAll(`#ui-feature-${name}-${key}-values .ui-listInput-valueWrapper label`)].map(entry => entry.innerText);
+                    let { preferences } = await browser.storage.local.get('preferences');
+                    preferences[name].options[key] = values;
+                    browser.storage.local.set({ preferences });
+                  }
+                  function newItem(text) {
+                    return noact({
+                      className: `ui-listInput-valueWrapper`,
+                      id: `ui-feature-${name}-${key}-value-${encodeURIComponent(text)}`,
+                      children: [
+                        {
+                          tag: 'label',
+                          children: text
+                        },
+                        {
+                          tag: 'input',
+                          type: 'button',
+                          value: '-',
+                          onclick: async function () {
+                            const element = document.getElementById(`ui-feature-${name}-${key}-value-${encodeURIComponent(text)}`);
+                            document.getElementById(`ui-feature-${name}-${key}-values`).removeChild(element);
+                            await saveState();
+                          }
+                        }
+                      ]
+                    });
+                  }
+                  let values = preference.options[key] ?? option.options ?? [];
+                  if (typeof values === 'string') {
+                    values = values.split('\n').map(value => value.trim());
+                  }
+                  wrapper = noact({
+                    className: 'ui-inputWrapper',
+                    children: [
+                      {
+                        tag: 'label',
+                        for: `ui-feature-${name}-${key}`,
+                        name: `${name}-${key}`,
+                        children: option.name
+                      },
+                      {
+
+                        id: `ui-feature-${name}-${key}-values`,
+                        className: 'ui-listInputWrapper',
+                        children: values.map(newItem)
+                      },
+                      {
+                        className: 'ui-listInputInputWrapper',
+                        children: [
+                          {
+                            tag: 'form',
+                            id: `ui-feature-${name}-${key}-form`,
+                            onsubmit: function () {
+                              const form = document.getElementById(`ui-feature-${name}-${key}-form`);
+                              const input = document.getElementById(`ui-feature-${name}-${key}-input`);
+                              const list = document.getElementById(`ui-feature-${name}-${key}-values`);
+                              const username = input.value.trim().toLowerCase();
+                              const existingEntry = document.getElementById(`ui-feature-${name}-${key}-value-${encodeURIComponent(username)}`);
+                              if (username && !existingEntry) {
+                                form.reset();
+                                list.appendChild(newItem(username));
+                                saveState();
+                              }
+                              return false;
+                            },
+                            children: [
+                              {
+                                tag: 'input',
+                                type: 'text',
+                                placeholder: option.placeholder,
+                                id: `ui-feature-${name}-${key}-input`,
+                                autocomplete: 'off',
+                                autocorrect: 'off',
+                              },
+                              {
+                                tag: 'input',
+                                type: 'submit',
+                                value: '+'
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  });
+                  break;
                 } default: {
                   console.warn(`[PawJob-Menu] Cannot render option ${name}.${key}: missing support for type '${option.type}'`);
                   break;

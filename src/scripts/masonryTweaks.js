@@ -14,20 +14,24 @@ const newMasonryCol = () => noact({
 });
 
 let columnCount = 2;
-let columnIndex = 0;
 let masonryCols = [];
+let columnHeights = [];
 let posts = new Set();
 let renderObserver;
+
+const getTargetColumn = () => columnHeights.map((h, j) => [h, j]).toSorted(([a], [b]) => a - b).shift()[1];
 
 const reflowMasonry = () => {
   document.querySelector(feedSelector).replaceChildren(...masonryCols);
 
-  const columnCount = masonryCols.length;
-  columnIndex = 0;
-  const virtualCols = [...Array(columnCount).keys()].map(() => []); // hell of a line
+  columnCount = masonryCols.length;
+  columnHeights = [...Array(columnCount).keys()].fill(0);
+  const virtualCols = [...Array(columnCount).keys()].map(() => []);
   posts.forEach(post => {
-    virtualCols[columnIndex++].push(post);
-    columnIndex = columnIndex % columnCount;
+    const target = getTargetColumn();
+    virtualCols[target].push(post);
+    columnHeights[target] += post.offsetHeight;
+    post.setAttribute(customAttribute, '');
   });
   masonryCols.forEach((col, i) => {
     col.replaceChildren(...virtualCols[i]);
@@ -37,8 +41,9 @@ const reflowMasonry = () => {
 const gatherPosts = () => posts = new Set(document.querySelectorAll(postSelector));
 
 const sortPosts = posts => posts.forEach(post => {
-  masonryCols[columnIndex++].append(post);
-  columnIndex = columnIndex % columnCount;
+  const target = getTargetColumn();
+  masonryCols[target].append(post);
+  columnHeights[target] += post.offsetHeight;
   post.setAttribute(customAttribute, '');
 });
 
@@ -74,6 +79,7 @@ const handleColumns = cols => {
 
 const run = ({ expandedMasonry }) => {
   columnCount = expandedMasonry;
+  columnHeights = [...Array(columnCount).keys()].fill(0);
   document.querySelectorAll(`[${customAttribute}]`).forEach(s => s.removeAttribute(customAttribute));
   mutationManager.start(`:not(${customAttribute})>${columnSelector}`, handleColumns);
 };
