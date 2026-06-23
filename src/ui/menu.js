@@ -476,6 +476,9 @@
                     );
                   }
                   let values = preference.options[key] ?? option.options ?? [];
+                  if (typeof values === 'string') {
+                    values = values.split('\n').map(value=>value.trim());
+                  }
                   wrapper = noact({
                     className: 'ui-inputWrapper',
                     children: [
