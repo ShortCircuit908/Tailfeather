@@ -95,7 +95,8 @@ const notificationHandlers = {
     }
 
     buildNotification(notif) {
-      if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())) {
+      if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())
+          && !notif.tags.some(tag => followedTags.includes(tag.toLowerCase()))) {
         return null;
       }
       return super.buildNotification(notif);
@@ -116,7 +117,8 @@ const notificationHandlers = {
     }
 
     buildNotification(notif) {
-      if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())) {
+      if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())
+          && !notif.tags.some(tag => followedTags.includes(tag.toLowerCase()))) {
         return null;
       }
       return super.buildNotification(notif);
@@ -135,7 +137,8 @@ const notificationHandlers = {
     }
 
     buildNotification(notif) {
-      if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())) {
+      if (!followedUsers.includes(this.getActor(notif).username.toLowerCase())
+          && !notif.tags.some(tag => followedTags.includes(tag.toLowerCase()))) {
         return null;
       }
       return super.buildNotification(notif);
@@ -254,6 +257,7 @@ let _requestInProgress = false;
 let _channel;
 
 let followedUsers;
+let followedTags;
 
 async function _cancel() {
   return getStorage(['preferences']).then(async ({ preferences }) => {
@@ -282,7 +286,7 @@ function _isSafeUrl(url) {
   }
 }
 
-function _parseFollowedUsers(str) {
+function _parseStringList(str) {
   return str.toLowerCase().split('\n').map(item => item.trim()).filter(item => item.length > 0);
 }
 
@@ -305,17 +309,21 @@ function _run() {
       if (!data || !data.type) return;
       if (data.type === 'sse_event' && _targetEvents.includes(data.eventName)) _onNotification(data);
     };
+    console.debug('[Notifications] Listening for TabSync events');
   }
 }
 
 export const update = async options => {
-  const { followedUsers: followedUsersRaw } = options;
-  followedUsers = _parseFollowedUsers(followedUsersRaw);
+  const {
+    followedUsers: followedUsersRaw,
+    followedTags: followedTagsRaw,
+  } = options;
+  followedUsers = _parseStringList(followedUsersRaw);
+  followedTags = _parseStringList(followedTagsRaw);
 };
 
 export const main = async () => {
-  const { followedUsers: followedUsersRaw } = await getOptions('notifications');
-  followedUsers = _parseFollowedUsers(followedUsersRaw);
+  await update(await getOptions('notifications'));
   if (Notification.permission === 'denied') {
     await _cancel();
     return;
@@ -335,6 +343,7 @@ export const main = async () => {
 
 export const clean = async () => {
   if (_channel) {
+    console.debug('[Notifications] Closing TabSync channel');
     _channel.close();
     _channel = null;
   }

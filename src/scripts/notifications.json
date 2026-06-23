@@ -12,6 +12,14 @@
         "textarea": true,
         "tooltip": "List of users (one per line, case-insensitive) you will receive additional notifications from.",
         "placeholder": "Usernames (one per line)"
+      },
+      "followedTags": {
+        "value": "",
+        "name": "Followed tags",
+        "type": "text",
+        "textarea": true,
+        "tooltip": "List of tags (one per line, case-insensitive) you will be notified of",
+        "placeholder": "Tags (one per line)"
       }
     }
   },
