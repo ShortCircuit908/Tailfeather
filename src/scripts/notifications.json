@@ -6,19 +6,18 @@
     "enabled": false,
     "options": {
       "followedUsers": {
-        "value": "",
+        "value": [],
         "name": "Followed users",
         "type": "listInput",
         "tooltip": "List of users you will receive additional notifications from.",
         "placeholder": "Username (case-insensitive)"
       },
       "followedTags": {
-        "value": "",
+        "value": [],
         "name": "Followed tags",
-        "type": "text",
-        "textarea": true,
-        "tooltip": "List of tags (one per line, case-insensitive) you will be notified of",
-        "placeholder": "Tags (one per line)"
+        "type": "listInput",
+        "tooltip": "List of tags you will be notified of",
+        "placeholder": "Tag (case-insensitive)"
       }
     }
   },

@@ -290,7 +290,10 @@ function _isSafeUrl(url) {
 }
 
 function _parseStringList(str) {
-  return str.toLowerCase().split('\n').map(item => item.trim()).filter(item => item.length > 0);
+  return str.toLowerCase()
+    .split('\n')
+    .map(item => item.trim())
+    .filter(item => item.trim().length > 0);
 }
 
 function _dedupeNotificationEvent(event){
@@ -346,8 +349,8 @@ export const update = async options => {
     followedUsers: followedUsersRaw,
     followedTags: followedTagsRaw,
   } = options;
-  followedUsers = _parseStringList(followedUsersRaw);
-  followedTags = _parseStringList(followedTagsRaw);
+  followedUsers = Array.isArray(followedUsersRaw) ? followedUsersRaw : _parseStringList(followedUsersRaw);
+  followedTags = Array.isArray(followedTagsRaw) ? followedTagsRaw : _parseStringList(followedTagsRaw);
 };
 
 export const main = async () => {
