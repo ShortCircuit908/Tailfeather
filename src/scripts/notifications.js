@@ -269,6 +269,7 @@ let _requestInProgress = false;
 let _channel;
 const _eventBufferSize = 5;
 const _eventBuffer = [];
+const _eventBufferTimestampFuzz = 100;
 
 let followedUsers;
 
@@ -300,7 +301,7 @@ function _isSafeUrl(url) {
 }
 
 function _dedupeNotificationEvent(event){
-  if (_eventBuffer.find(value => value.username === event.username && value.timestamp === event.timestamp) !== undefined) {
+  if (_eventBuffer.some(value => value.actor === event.actor && value.postId === event.postId && Math.abs(value.timestamp - event.timestamp) <= _eventBufferTimestampFuzz)) {
     return true;
   }
   if (_eventBuffer.length >= _eventBufferSize) {
@@ -322,9 +323,11 @@ function _onNotification(e) {
 
   // Maintain a buffer of recent events to prevent duplicate notifications
   // Selection of attributes to use as a unique identifier is paramount
-  // In this case, it is assumed that a user cannot generate multiple events in the same millisecond
+  // In this case, it is assumed that a user cannot generate multiple events
+  // on the same post within 100 milliseconds
   const eventIdentifier = {
     actor: builder.getActor(detail).username,
+    postId: detail.post_id,
     timestamp: detail._ts
   }
   if (_dedupeNotificationEvent(eventIdentifier)) {
