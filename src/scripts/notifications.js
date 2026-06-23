@@ -187,7 +187,7 @@ const notificationHandlers = {
     }
     getLink(notif) {
       const rootId = String(notif.post_id).split(':', 1)[0];
-      return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(rootId));
+      return formatString(NotifBuilder.postUrl, encodeURIComponent(activeSlug), encodeURIComponent(rootId));
     }
     getDetails(notif) {
       return [notif.emoji || ''];
@@ -204,7 +204,7 @@ const notificationHandlers = {
       };
     }
     getLink(notif) {
-      return formatString(NotifBuilder.postUrl, encodeURIComponent(this.getActor(notif).username), encodeURIComponent(notif.post_id));
+      return formatString(NotifBuilder.postUrl, encodeURIComponent(activeSlug), encodeURIComponent(notif.post_id));
     }
   }),
   new_ask: new (class extends NotifBuilder {
