@@ -39,13 +39,14 @@
   --accent: #6b7094;
   --accent-hover: #8388a8;
   --accent-dim: rgba(107, 112, 148, 0.15);
+  --accent-text: #fff;
   --border: #2e3148;
   --border-light: #252838;
   --error: #e74c3c;
   --success: #2ecc71;
   --warning: #f39c12;
   --radius: .5rem;
-  --radius-sm: 4px;
+  --radius-sm: .25rem;
   --max-width: 680px;
   --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --border-radius-sm: 3px;
@@ -853,24 +854,55 @@ a.ui-aboutLink:hover {
 }
 
 .ui-listInputWrapper {
-  display: inline-block;
-}
-
-.ui-listInput-valueWrapper > *:not(:last-child) {
-  margin-right: 0.5rem;
-}
-
-.ui-listInput-valueWrapper input {
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
 .ui-listInput-valueWrapper {
+  width: fit-content;
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
 }
 
+.ui-listInputInputWrapper form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.ui-listInputInputWrapper input[type=text] {
+  border: none;
+  border-radius: var(--radius-sm);
+  outline: none;
+  padding: 0.25rem;
+  font-size: 14px;
+  box-sizing: border-box;
+  background: var(--bg-input);
+}
+
+.ui-listInput-valueWrapper input,
 .ui-listInputInputWrapper input[type=submit] {
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: var(--radius);
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 0.8rem;
+
+  &:hover {
+    background: var(--accent-hover);
+    text-decoration: none;
+    color: var(--accent-text);
+  }
 }

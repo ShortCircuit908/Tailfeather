@@ -444,40 +444,38 @@
                     ]
                   });
                   break;
-                }  case 'listInput': {
-                  const saveState = async function(){
-                    const values = [...document.querySelectorAll(`#ui-feature-${name}-${key}-values .ui-listInput-valueWrapper label`)].map(entry=>entry.innerText);
+                } case 'listInput': {
+                  async function saveState() {
+                    const values = [...document.querySelectorAll(`#ui-feature-${name}-${key}-values .ui-listInput-valueWrapper label`)].map(entry => entry.innerText);
                     let { preferences } = await browser.storage.local.get('preferences');
                     preferences[name].options[key] = values;
                     browser.storage.local.set({ preferences });
                   }
-                  const newItem = function(text){
-                    return noact(
-                      {
-                        className: `ui-listInput-valueWrapper`,
-                        id: `ui-feature-${name}-${key}-value-${encodeURIComponent(text)}`,
-                        children: [
-                          {
-                            tag: 'label',
-                            children: text
-                          },
-                          {
-                            tag: 'input',
-                            type: 'button',
-                            value: '-',
-                            onclick: async function () {
-                              const element = document.getElementById(`ui-feature-${name}-${key}-value-${encodeURIComponent(text)}`);
-                              document.getElementById(`ui-feature-${name}-${key}-values`).removeChild(element);
-                              await saveState();
-                            }
+                  function newItem(text) {
+                    return noact({
+                      className: `ui-listInput-valueWrapper`,
+                      id: `ui-feature-${name}-${key}-value-${encodeURIComponent(text)}`,
+                      children: [
+                        {
+                          tag: 'label',
+                          children: text
+                        },
+                        {
+                          tag: 'input',
+                          type: 'button',
+                          value: '-',
+                          onclick: async function () {
+                            const element = document.getElementById(`ui-feature-${name}-${key}-value-${encodeURIComponent(text)}`);
+                            document.getElementById(`ui-feature-${name}-${key}-values`).removeChild(element);
+                            await saveState();
                           }
-                        ]
-                      }
-                    );
+                        }
+                      ]
+                    });
                   }
                   let values = preference.options[key] ?? option.options ?? [];
                   if (typeof values === 'string') {
-                    values = values.split('\n').map(value=>value.trim());
+                    values = values.split('\n').map(value => value.trim());
                   }
                   wrapper = noact({
                     className: 'ui-inputWrapper',
@@ -489,9 +487,10 @@
                         children: option.name
                       },
                       {
-                        className: 'ui-listInputWrapper',
+
                         id: `ui-feature-${name}-${key}-values`,
-                        children: values.map(value=>newItem(value))
+                        className: 'ui-listInputWrapper',
+                        children: values.map(newItem)
                       },
                       {
                         className: 'ui-listInputInputWrapper',
@@ -505,7 +504,7 @@
                               const list = document.getElementById(`ui-feature-${name}-${key}-values`);
                               const username = input.value.trim().toLowerCase();
                               const existingEntry = document.getElementById(`ui-feature-${name}-${key}-value-${encodeURIComponent(username)}`);
-                              if (!existingEntry) {
+                              if (username && !existingEntry) {
                                 form.reset();
                                 list.appendChild(newItem(username));
                                 saveState();
