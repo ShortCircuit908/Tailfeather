@@ -851,3 +851,26 @@ a.ui-aboutLink:hover {
 .ui-new {
   color: rgb(var(--accent));
 }
+
+.ui-listInputWrapper {
+  display: inline-block;
+}
+
+.ui-listInput-valueWrapper > *:not(:last-child) {
+  margin-right: 0.5rem;
+}
+
+.ui-listInput-valueWrapper input {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.ui-listInput-valueWrapper {
+  display: flex;
+  justify-content: space-between;
+}
+
+.ui-listInputInputWrapper input[type=submit] {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
