@@ -329,9 +329,9 @@ function _onNotification(e) {
 }
 
 function _run() {
+  _targetEvents.forEach(event=> document.addEventListener(`nr:${event.type}`, _onNotification));
   if (!_channel) {
     _channel = new BroadcastChannel('nr_tab_sync');
-    console.debug('[Notifications] Opened SSE channel');
     _channel.onmessage = message => {
       const data = message.data;
       if (!data || !data.type) return;
@@ -370,10 +370,10 @@ export const main = async () => {
 };
 
 export const clean = async () => {
+  _targetEvents.forEach(event=> document.removeEventListener(`nr:${event.type}`, _onNotification));
   if (_channel) {
     console.debug('[Notifications] Closing TabSync channel');
     _channel.close();
     _channel = null;
-    console.debug('[Notifications] Closed SSE channel');
   }
 };
